@@ -18,6 +18,16 @@ app.get('/', (req, res) => {
   res.sendFile(file, { root: process.cwd() });
 });
 
+// Explicit app entry routes. Static index resolution stays disabled so the
+// hostname-aware root page above remains in full control.
+app.get(['/graphql-demo', '/graphql-demo/'], (req, res) => {
+  res.sendFile('public/graphql-demo/index.html', { root: process.cwd() });
+});
+
+app.get(['/npc-generator', '/npc-generator/'], (req, res) => {
+  res.sendFile('public/npc-generator/index.html', { root: process.cwd() });
+});
+
 app.use(express.static('public', { index: false }));
 
 const adventurers = [
