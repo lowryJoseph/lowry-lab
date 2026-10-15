@@ -3,19 +3,183 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>NPC Generator — Lowry Lab</title>
-  <link rel="stylesheet" href="/lab.css" />
-  <style>.placeholder{max-width:760px;margin:0 auto;padding:72px 0}.back{color:inherit;text-decoration:none;font-weight:800}.back:hover{text-decoration:underline}.placeholder-card{margin-top:36px;padding:34px;background:linear-gradient(145deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:18px}.placeholder-card h1{font-size:clamp(2.2rem,7vw,4.8rem);line-height:1;margin:.2em 0}.placeholder-card p{color:var(--muted);line-height:1.7;font-size:1.05rem}</style>
+  <title>Fantasy Character Forge — Lowry Lab</title>
+  <link rel="stylesheet" href="/npc-generator/styles.css" />
 </head>
 <body>
-  <main class="lab-shell placeholder">
-    <a class="back" href="/">← Lowry Lab</a>
-    <section class="placeholder-card">
-      <p class="eyebrow">NEXT EXPERIMENT</p>
-      <h1>🎲 NPC Generator</h1>
-      <p>The route is wired up. The app is not built yet. When it is, we replace this page without touching Creature Forge or the Lowry Lab launcher.</p>
-      <p><strong>Coming next:</strong> names, roles, personalities, motives, secrets, odd habits, and enough randomness to make a tavern deeply uncomfortable.</p>
+  <main class="forge-shell">
+    <header class="topbar">
+      <a class="back" href="/">← Lowry Lab</a>
+      <span class="route">/npc-generator</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">LOWRY LAB EXPERIMENT #2</p>
+      <h1>Fantasy Character Forge</h1>
+      <p>Need a suspicious tavern owner in ten seconds? Generate an NPC. Want someone you could actually play? Build a character and spend the stats yourself.</p>
+    </section>
+
+    <section class="mode-switch" aria-label="Choose generator mode">
+      <button class="mode-btn active" type="button" data-mode="npc">
+        <span class="mode-icon">🎲</span>
+        <span><strong>Generate NPC</strong><small>Fast, strange, table-ready</small></span>
+      </button>
+      <button class="mode-btn" type="button" data-mode="character">
+        <span class="mode-icon">🛡️</span>
+        <span><strong>Build Character</strong><small>Choose a concept + spend stat points</small></span>
+      </button>
+    </section>
+
+    <section id="npcMode" class="mode-panel">
+      <div class="workspace">
+        <form id="npcForm" class="controls card">
+          <div class="section-title">
+            <span>NPC controls</span>
+            <small>Pick as much or as little as you care about.</small>
+          </div>
+
+          <label>
+            Tone
+            <select id="npcTone">
+              <option value="grounded">Grounded</option>
+              <option value="heroic">Heroic</option>
+              <option value="grim">Grim</option>
+              <option value="weird">Weird</option>
+            </select>
+          </label>
+
+          <label>
+            Role
+            <select id="npcRole">
+              <option value="random">Surprise me</option>
+              <option value="civilian">Civilian</option>
+              <option value="authority">Authority</option>
+              <option value="criminal">Criminal</option>
+              <option value="adventurer">Adventurer</option>
+              <option value="mystic">Mystic</option>
+            </select>
+          </label>
+
+          <label>
+            Ancestry
+            <select id="npcAncestry">
+              <option value="random">Surprise me</option>
+              <option>Human</option>
+              <option>Dwarf</option>
+              <option>Elf</option>
+              <option>Halfling</option>
+              <option>Orc</option>
+              <option>Goblin</option>
+              <option>Dragonborn</option>
+              <option>Tiefling</option>
+            </select>
+          </label>
+
+          <label class="check-row">
+            <input id="npcDangerous" type="checkbox" />
+            <span><strong>Make them dangerous</strong><small>They may look ordinary. They are not.</small></span>
+          </label>
+
+          <button class="primary" type="submit">🎲 Generate NPC</button>
+          <button id="rerollNpcName" class="secondary" type="button">Reroll name only</button>
+        </form>
+
+        <article id="npcResult" class="result-card card" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <section id="characterMode" class="mode-panel hidden">
+      <div class="character-grid">
+        <form id="characterForm" class="controls card">
+          <div class="section-title">
+            <span>Character concept</span>
+            <small>Make the big choices. The forge fills in the connective tissue.</small>
+          </div>
+
+          <label>
+            Name
+            <div class="input-with-button">
+              <input id="pcName" type="text" maxlength="40" placeholder="Leave blank for a random name" />
+              <button id="randomPcName" type="button" class="tiny">🎲</button>
+            </div>
+          </label>
+
+          <label>
+            Ancestry
+            <select id="pcAncestry">
+              <option>Human</option>
+              <option>Dwarf</option>
+              <option>Elf</option>
+              <option>Halfling</option>
+              <option>Orc</option>
+              <option>Goblin</option>
+              <option>Dragonborn</option>
+              <option>Tiefling</option>
+            </select>
+          </label>
+
+          <label>
+            Archetype
+            <select id="pcArchetype">
+              <option value="guardian">Guardian</option>
+              <option value="scoundrel">Scoundrel</option>
+              <option value="arcanist">Arcanist</option>
+              <option value="warden">Warden</option>
+              <option value="devout">Devout</option>
+              <option value="berserker">Berserker</option>
+              <option value="minstrel">Minstrel</option>
+            </select>
+          </label>
+
+          <label>
+            Background
+            <select id="pcBackground">
+              <option>Soldier</option>
+              <option>Urchin</option>
+              <option>Scholar</option>
+              <option>Outlander</option>
+              <option>Merchant</option>
+              <option>Artisan</option>
+              <option>Noble</option>
+              <option>Criminal</option>
+              <option>Sailor</option>
+            </select>
+          </label>
+
+          <label>
+            Level
+            <input id="pcLevel" type="number" min="1" max="20" value="1" />
+          </label>
+
+          <div class="stat-header">
+            <div>
+              <strong>Spend your stat points</strong>
+              <small>Each stat starts at 8. Maximum 15.</small>
+            </div>
+            <div class="points"><span id="pointsRemaining">24</span><small>remaining</small></div>
+          </div>
+
+          <div id="stats" class="stats-editor"></div>
+
+          <div class="stat-actions">
+            <button id="recommendedStats" class="secondary" type="button">Recommended build</button>
+            <button id="resetStats" class="secondary" type="button">Reset stats</button>
+          </div>
+
+          <button class="primary" type="submit">🛡️ Forge Character</button>
+        </form>
+
+        <article id="characterResult" class="result-card card" aria-live="polite"></article>
+      </div>
+    </section>
+
+    <section class="why card">
+      <p class="eyebrow">WHY TWO MODES?</p>
+      <h2>Same world. Different jobs.</h2>
+      <p>An NPC generator should remove decisions: click once and get someone useful. A player-character builder should preserve decisions: you choose the concept and decide where the character is strong. The app shares the same underlying fantasy data, but the workflow changes based on what the person is trying to accomplish.</p>
     </section>
   </main>
+
+  <script src="/npc-generator/app.js"></script>
 </body>
 </html>
