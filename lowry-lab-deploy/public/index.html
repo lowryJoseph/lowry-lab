@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Creature Forge</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <p class="eyebrow">REST vs GraphQL routing demo</p>
+      <h1>⚔ Creature Forge ⚔</h1>
+      <p class="lede">Same screen. Same backend REST APIs. Flip one switch and watch who has to understand the backend.</p>
+    </header>
+
+    <section class="card mode-card">
+      <div class="mode-heading">
+        <div>
+          <h2>0. Pick the architecture</h2>
+          <p id="mode-summary">GraphQL mode: the UI asks for a Creature. GraphQL figures out where the pieces live.</p>
+        </div>
+        <div class="mode-switch" role="group" aria-label="API architecture mode">
+          <button id="rest-mode" type="button" class="mode-button" data-mode="REST">Direct REST</button>
+          <button id="graphql-mode" type="button" class="mode-button active" data-mode="GRAPHQL">GraphQL Router</button>
+        </div>
+      </div>
+
+      <div id="layman-box" class="layman-box">
+        <strong>🍺 Pub version:</strong>
+        <span id="layman-text">You tell one bartender what you want. The bartender knows which shelves and taps to use, gathers everything, and hands you one finished drink.</span>
+      </div>
+
+      <div class="flow" aria-label="Request flow">
+        <div class="flow-node primary">🖥️ UI<br><small>Creature screen</small></div>
+        <div class="flow-arrow">→</div>
+        <div id="flow-middle" class="flow-node router">🧙 GraphQL<br><small>router / translator</small></div>
+        <div class="flow-arrow">→</div>
+        <div class="flow-stack">
+          <div class="flow-node api">REST: Adventurers / Monsters</div>
+          <div class="flow-node api">REST: Battle Stats</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>1. Create the same business object</h2>
+      <p class="subtle">The form does not change when you toggle architectures. Only <em>who handles the routing</em> changes.</p>
+      <div class="kind-picker">
+        <button type="button" class="kind active" data-kind="ADVENTURER">🛡 Adventurer</button>
+        <button type="button" class="kind" data-kind="MONSTER">🐉 Monster</button>
+      </div>
+
+      <form id="forge-form">
+        <div class="grid">
+          <label>Name <input id="name" value="Goblin Intern" required /></label>
+          <label>Level <input id="level" type="number" value="5" min="1" required /></label>
+          <label>Hit Points <input id="hitPoints" type="number" value="42" min="1" required /></label>
+          <label>Armor Class <input id="armorClass" type="number" value="15" min="1" required /></label>
+        </div>
+
+        <div id="adventurer-fields" class="grid segment">
+          <label>Class <input id="className" value="Rogue" /></label>
+          <label>Ancestry <input id="ancestry" value="Halfling" /></label>
+          <label>Experience <input id="experience" type="number" value="6500" min="0" /></label>
+        </div>
+
+        <div id="monster-fields" class="grid segment hidden">
+          <label>Challenge Rating <input id="challengeRating" type="number" value="3" min="0" step="0.5" /></label>
+          <label>Monster Type <input id="monsterType" value="Aberration" /></label>
+          <label class="check"><input id="legendary" type="checkbox" /> Legendary</label>
+        </div>
+
+        <button class="forge" type="submit">Summon Creature</button>
+      </form>
+    </section>
+
+    <section class="scoreboard">
+      <div class="metric card">
+        <span class="metric-number" id="browser-calls">—</span>
+        <span class="metric-label">UI business requests</span>
+        <small id="browser-calls-help">Run an action to compare.</small>
+      </div>
+      <div class="metric card">
+        <span class="metric-number" id="routing-decisions">—</span>
+        <span class="metric-label">routing decisions in the UI</span>
+        <small id="routing-help">Run an action to compare.</small>
+      </div>
+      <div class="metric card">
+        <span class="metric-number" id="backend-calls">—</span>
+        <span class="metric-label">REST calls used underneath</span>
+        <small>The backend work can stay REST in both modes.</small>
+      </div>
+    </section>
+
+    <section class="two-col">
+      <div class="card">
+        <h2 id="request-title">2. Request from the UI</h2>
+        <p id="request-caption" class="subtle">In GraphQL mode the UI describes the data it wants.</p>
+        <pre id="request-view">Waiting for a summon...</pre>
+      </div>
+      <div class="card">
+        <h2>3. Final object the UI receives</h2>
+        <p class="subtle">Notice that both architectures can produce the same useful object.</p>
+        <pre id="response-view">No creature yet.</pre>
+      </div>
+    </section>
+
+    <section class="card trace-card">
+      <div class="log-title">
+        <div>
+          <h2>4. Follow the request</h2>
+          <p id="trace-explanation">GraphQL owns the backend knowledge. The UI only knows the GraphQL contract.</p>
+        </div>
+        <button id="load-example" type="button" class="secondary">Load existing dragon (m2)</button>
+      </div>
+      <div id="trace" class="trace empty">Run an action and the request path will appear here.</div>
+    </section>
+
+    <section class="card takeaway">
+      <h2>5. So what is the actual point?</h2>
+      <div class="takeaway-grid">
+        <div>
+          <h3>Direct REST</h3>
+          <p>The UI needs to know <strong>which API</strong> to call, <strong>which extra APIs</strong> contain related data, and how to combine the responses.</p>
+        </div>
+        <div>
+          <h3>GraphQL facade</h3>
+          <p>The UI asks for a <strong>Creature</strong>. GraphQL knows how the backend is organized and can keep using the existing REST services underneath.</p>
+        </div>
+      </div>
+      <p class="bottom-line"><strong>Layperson bottom line:</strong> REST mode makes every customer learn the layout of the warehouse. GraphQL gives them a service desk: ask for what you need, and the desk finds it.</p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
