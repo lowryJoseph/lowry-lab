@@ -4,12 +4,8 @@ import { createHandler } from 'graphql-http/lib/use/express';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 app.use(express.json());
 
-// Serve different root pages from the same Render service depending on hostname.
-// lowryjoseph.com -> personal landing page
-// apps.lowryjoseph.com -> Lowry Lab launcher
 app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   const file = host === 'lowryjoseph.com' || host === 'www.lowryjoseph.com'
@@ -18,74 +14,103 @@ app.get('/', (req, res) => {
   res.sendFile(file, { root: process.cwd() });
 });
 
-// Explicit app entry routes. Static index resolution stays disabled so the
-// hostname-aware root page above remains in full control.
 app.get(['/graphql-demo', '/graphql-demo/'], (req, res) => {
   res.sendFile('public/graphql-demo/index.html', { root: process.cwd() });
 });
-
 app.get(['/npc-generator', '/npc-generator/'], (req, res) => {
   res.sendFile('public/npc-generator/index.html', { root: process.cwd() });
 });
-
 app.use(express.static('public', { index: false }));
 
+// ------------------------------------------------------
+// Existing REST services. GraphQL intentionally reuses them.
+// ------------------------------------------------------
 const adventurers = [
   { id: 'a1', kind: 'ADVENTURER', name: 'Brakka Stonehand', level: 7, hitPoints: 62, armorClass: 17, className: 'Barbarian', ancestry: 'Half-Orc', experience: 23000 },
   { id: 'a2', kind: 'ADVENTURER', name: 'Mira Quill', level: 5, hitPoints: 34, armorClass: 15, className: 'Wizard', ancestry: 'Human', experience: 6500 }
 ];
-
 const monsters = [
   { id: 'm1', kind: 'MONSTER', name: 'Bog Maw', level: 7, hitPoints: 88, armorClass: 14, challengeRating: 5, monsterType: 'Aberration', legendary: false },
   { id: 'm2', kind: 'MONSTER', name: 'Ashscale the Patient', level: 14, hitPoints: 230, armorClass: 20, challengeRating: 13, monsterType: 'Dragon', legendary: true }
 ];
+const bosses = [
+  { id: 'b1', kind: 'BOSS', name: 'Vharos, Warden of the Last Gate', level: 20, hitPoints: 480, armorClass: 23, challengeRating: 22, monsterType: 'Ancient Dragon', legendary: true }
+];
 
 const battleStats = {
-  a1: { initiative: 2, speed: 30 },
-  a2: { initiative: 4, speed: 30 },
-  m1: { initiative: 1, speed: 25 },
-  m2: { initiative: 3, speed: 40 }
+  a1: { initiative: 2, speed: 30 }, a2: { initiative: 4, speed: 30 },
+  m1: { initiative: 1, speed: 25 }, m2: { initiative: 3, speed: 40 },
+  b1: { initiative: 6, speed: 50 }
+};
+const equipment = {
+  a1: ['Greataxe', 'Explorer Pack'], a2: ['Spellbook', 'Quarterstaff'],
+  m1: ['Natural weapons'], m2: ['Natural weapons'], b1: ['Crown of Emberglass']
+};
+const abilities = {
+  a1: ['Rage', 'Reckless Attack'], a2: ['Arcane Recovery', 'Fire Bolt'],
+  m1: ['Swallow', 'Bog Camouflage'], m2: ['Fire Breath', 'Wing Attack'],
+  b1: ['Inferno Breath', 'Gatebreaker', 'Wing Tempest']
+};
+const legendaryActions = {
+  m2: ['Detect', 'Tail Attack'],
+  b1: ['Command the Gate', 'Magma Step', 'Cataclysmic Roar']
+};
+const lootTables = {
+  b1: ['Emberglass Crown', 'Ancient Coin Hoard', 'Gatekeeper Sigil']
+};
+const phases = {
+  b1: ['Phase 1: Warden', 'Phase 2: Broken Seal', 'Phase 3: Last Flame']
+};
+const lairActions = {
+  b1: ['Seal a doorway', 'Summon magma fissure', 'Darken the chamber']
 };
 
-// ------------------------------
-// Existing REST API layer
-// ------------------------------
-app.get('/api/adventurers/:id', (req, res) => {
-  const item = adventurers.find(x => x.id === req.params.id);
-  item ? res.json(item) : res.status(404).json({ error: 'Adventurer not found' });
-});
+function route(collection, name) {
+  app.get(`/api/${name}/:id`, (req, res) => {
+    const item = collection.find(x => x.id === req.params.id);
+    item ? res.json(item) : res.status(404).json({ error: `${name} item not found` });
+  });
+  app.post(`/api/${name}`, (req, res) => {
+    const prefix = name === 'adventurers' ? 'a' : name === 'monsters' ? 'm' : 'b';
+    const id = `${prefix}${collection.length + 1}`;
+    const kind = name === 'adventurers' ? 'ADVENTURER' : name === 'monsters' ? 'MONSTER' : 'BOSS';
+    const created = { id, kind, ...req.body };
+    collection.push(created);
+    battleStats[id] = { initiative: 0, speed: kind === 'BOSS' ? 40 : 30 };
+    equipment[id] = kind === 'ADVENTURER' ? ['Starting equipment'] : ['Natural weapons'];
+    abilities[id] = kind === 'ADVENTURER' ? ['Class feature'] : ['Signature attack'];
+    if (kind === 'BOSS') {
+      legendaryActions[id] = ['Legendary action'];
+      lootTables[id] = ['Rare treasure'];
+      phases[id] = ['Phase 1', 'Phase 2'];
+      lairActions[id] = ['Lair action'];
+    }
+    res.status(201).json(created);
+  });
+}
+route(adventurers, 'adventurers');
+route(monsters, 'monsters');
+route(bosses, 'bosses');
 
-app.get('/api/monsters/:id', (req, res) => {
-  const item = monsters.find(x => x.id === req.params.id);
-  item ? res.json(item) : res.status(404).json({ error: 'Monster not found' });
-});
+function mapRoute(path, source, label) {
+  app.get(path, (req, res) => {
+    const item = source[req.params.id];
+    item ? res.json({ [label]: item }) : res.status(404).json({ error: `${label} not found` });
+  });
+}
+mapRoute('/api/battle-stats/:id', battleStats, 'battleStats');
+mapRoute('/api/equipment/:id', equipment, 'equipment');
+mapRoute('/api/abilities/:id', abilities, 'abilities');
+mapRoute('/api/legendary-actions/:id', legendaryActions, 'legendaryActions');
+mapRoute('/api/loot/:id', lootTables, 'loot');
+mapRoute('/api/phases/:id', phases, 'phases');
+mapRoute('/api/lair-actions/:id', lairActions, 'lairActions');
 
-app.get('/api/battle-stats/:id', (req, res) => {
-  const item = battleStats[req.params.id];
-  item ? res.json(item) : res.status(404).json({ error: 'Stats not found' });
-});
-
-app.post('/api/adventurers', (req, res) => {
-  const id = `a${adventurers.length + 1}`;
-  const created = { id, kind: 'ADVENTURER', ...req.body };
-  adventurers.push(created);
-  battleStats[id] = { initiative: 0, speed: 30 };
-  res.status(201).json(created);
-});
-
-app.post('/api/monsters', (req, res) => {
-  const id = `m${monsters.length + 1}`;
-  const created = { id, kind: 'MONSTER', ...req.body };
-  monsters.push(created);
-  battleStats[id] = { initiative: 0, speed: 30 };
-  res.status(201).json(created);
-});
-
-// ------------------------------
-// GraphQL facade / routing layer
-// ------------------------------
+// ------------------------------------------------------
+// GraphQL facade. This is the consumer-facing contract.
+// ------------------------------------------------------
 const schema = buildSchema(`
-  enum CreatureKind { ADVENTURER MONSTER }
+  enum CreatureKind { ADVENTURER MONSTER BOSS }
 
   interface Creature {
     id: ID!
@@ -96,136 +121,109 @@ const schema = buildSchema(`
     armorClass: Int!
     initiative: Int!
     speed: Int!
+    abilities: [String!]!
+    equipment: [String!]!
   }
 
   type Adventurer implements Creature {
-    id: ID!
-    kind: CreatureKind!
-    name: String!
-    level: Int!
-    hitPoints: Int!
-    armorClass: Int!
-    initiative: Int!
-    speed: Int!
-    className: String!
-    ancestry: String!
-    experience: Int!
+    id: ID! kind: CreatureKind! name: String! level: Int! hitPoints: Int! armorClass: Int!
+    initiative: Int! speed: Int! abilities: [String!]! equipment: [String!]!
+    className: String! ancestry: String! experience: Int!
   }
 
   type Monster implements Creature {
-    id: ID!
-    kind: CreatureKind!
-    name: String!
-    level: Int!
-    hitPoints: Int!
-    armorClass: Int!
-    initiative: Int!
-    speed: Int!
-    challengeRating: Float!
-    monsterType: String!
-    legendary: Boolean!
+    id: ID! kind: CreatureKind! name: String! level: Int! hitPoints: Int! armorClass: Int!
+    initiative: Int! speed: Int! abilities: [String!]! equipment: [String!]!
+    challengeRating: Float! monsterType: String! legendary: Boolean!
+    legendaryActions: [String!]!
   }
 
-  type CreaturePayload {
-    creature: Creature
-    routeTrace: [String!]!
+  type BossMonster implements Creature {
+    id: ID! kind: CreatureKind! name: String! level: Int! hitPoints: Int! armorClass: Int!
+    initiative: Int! speed: Int! abilities: [String!]! equipment: [String!]!
+    challengeRating: Float! monsterType: String! legendary: Boolean!
+    legendaryActions: [String!]! loot: [String!]! phases: [String!]! lairActions: [String!]!
   }
 
-  type Query {
-    creature(id: ID!): CreaturePayload!
-  }
+  type CreaturePayload { creature: Creature routeTrace: [String!]! backendCallCount: Int! }
+  type Query { creature(id: ID!, requirementLevel: Int = 3): CreaturePayload! }
 
   input CreateCreatureInput {
-    kind: CreatureKind!
-    name: String!
-    level: Int!
-    hitPoints: Int!
-    armorClass: Int!
-    className: String
-    ancestry: String
-    experience: Int
-    challengeRating: Float
-    monsterType: String
-    legendary: Boolean
+    kind: CreatureKind! name: String! level: Int! hitPoints: Int! armorClass: Int!
+    className: String ancestry: String experience: Int
+    challengeRating: Float monsterType: String legendary: Boolean
   }
-
-  type Mutation {
-    createCreature(input: CreateCreatureInput!): CreaturePayload!
-  }
+  type Mutation { createCreature(input: CreateCreatureInput!, requirementLevel: Int = 3): CreaturePayload! }
 `);
 
-async function restGet(path, routeTrace) {
-  routeTrace.push(`GraphQL → REST GET ${path}`);
+async function restGet(path, trace) {
+  trace.push(`GraphQL → REST GET ${path}`);
   const response = await fetch(`http://127.0.0.1:${PORT}${path}`);
   if (!response.ok) return null;
   return response.json();
 }
-
-async function restPost(path, body, routeTrace) {
-  routeTrace.push(`GraphQL → REST POST ${path}`);
+async function restPost(path, body, trace) {
+  trace.push(`GraphQL → REST POST ${path}`);
   const response = await fetch(`http://127.0.0.1:${PORT}${path}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body)
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
   });
   if (!response.ok) throw new Error(`REST call failed: ${path}`);
   return response.json();
 }
+function typePath(kind, id = '') {
+  const base = kind === 'ADVENTURER' ? 'adventurers' : kind === 'MONSTER' ? 'monsters' : 'bosses';
+  return `/api/${base}${id ? `/${id}` : ''}`;
+}
+function kindFromId(id) { return id.startsWith('a') ? 'ADVENTURER' : id.startsWith('m') ? 'MONSTER' : 'BOSS'; }
 
-async function hydrateWithSharedStats(creature, routeTrace) {
-  if (!creature) return null;
-  const stats = await restGet(`/api/battle-stats/${creature.id}`, routeTrace);
-  return { ...creature, ...stats, __typename: creature.kind === 'MONSTER' ? 'Monster' : 'Adventurer' };
+async function hydrate(base, requirementLevel, trace) {
+  if (!base) return null;
+  const parts = [];
+  // Stage 1: shared stats.
+  parts.push(restGet(`/api/battle-stats/${base.id}`, trace));
+  // Stage 2: product wants richer creature data.
+  if (requirementLevel >= 2) {
+    parts.push(restGet(`/api/abilities/${base.id}`, trace));
+    parts.push(restGet(`/api/equipment/${base.id}`, trace));
+  }
+  // Stage 3: monster/boss-specific requirements.
+  if (requirementLevel >= 3 && (base.kind === 'MONSTER' || base.kind === 'BOSS')) {
+    parts.push(restGet(`/api/legendary-actions/${base.id}`, trace));
+  }
+  // Stage 4+: boss segment keeps gaining product requirements.
+  if (base.kind === 'BOSS') {
+    if (requirementLevel >= 4) parts.push(restGet(`/api/loot/${base.id}`, trace));
+    if (requirementLevel >= 5) parts.push(restGet(`/api/phases/${base.id}`, trace));
+    if (requirementLevel >= 6) parts.push(restGet(`/api/lair-actions/${base.id}`, trace));
+  }
+
+  const resolved = await Promise.all(parts);
+  const merged = Object.assign({}, base, ...resolved.filter(Boolean));
+  const typename = base.kind === 'ADVENTURER' ? 'Adventurer' : base.kind === 'MONSTER' ? 'Monster' : 'BossMonster';
+  return { ...merged, __typename: typename, legendaryActions: merged.legendaryActions || [], loot: merged.loot || [], phases: merged.phases || [], lairActions: merged.lairActions || [], abilities: merged.abilities || [], equipment: merged.equipment || [] };
 }
 
 const root = {
-  creature: async ({ id }) => {
-    const routeTrace = [`UI → GraphQL: creature(id: ${id})`];
-    const base = id.startsWith('m')
-      ? await restGet(`/api/monsters/${id}`, routeTrace)
-      : await restGet(`/api/adventurers/${id}`, routeTrace);
-    const creature = await hydrateWithSharedStats(base, routeTrace);
-    routeTrace.push('GraphQL combined the REST responses → UI');
-    return { creature, routeTrace };
+  creature: async ({ id, requirementLevel }) => {
+    const trace = [`UI → GraphQL: creature(id: ${id})`];
+    const kind = kindFromId(id);
+    const base = await restGet(typePath(kind, id), trace);
+    const creature = await hydrate(base, requirementLevel, trace);
+    trace.push('GraphQL composed the existing REST responses → UI');
+    return { creature, routeTrace: trace, backendCallCount: trace.filter(x => x.includes('GraphQL → REST')).length };
   },
-
-  createCreature: async ({ input }) => {
-    const routeTrace = [`UI → GraphQL: createCreature(kind: ${input.kind})`];
-    let created;
-
-    if (input.kind === 'MONSTER') {
-      created = await restPost('/api/monsters', {
-        name: input.name,
-        level: input.level,
-        hitPoints: input.hitPoints,
-        armorClass: input.armorClass,
-        challengeRating: input.challengeRating ?? 1,
-        monsterType: input.monsterType ?? 'Beast',
-        legendary: input.legendary ?? false
-      }, routeTrace);
-    } else {
-      created = await restPost('/api/adventurers', {
-        name: input.name,
-        level: input.level,
-        hitPoints: input.hitPoints,
-        armorClass: input.armorClass,
-        className: input.className ?? 'Fighter',
-        ancestry: input.ancestry ?? 'Human',
-        experience: input.experience ?? 0
-      }, routeTrace);
-    }
-
-    const creature = await hydrateWithSharedStats(created, routeTrace);
-    routeTrace.push('GraphQL combined the REST responses → UI');
-    return { creature, routeTrace };
+  createCreature: async ({ input, requirementLevel }) => {
+    const trace = [`UI → GraphQL: createCreature(kind: ${input.kind})`];
+    const common = { name: input.name, level: input.level, hitPoints: input.hitPoints, armorClass: input.armorClass };
+    let body;
+    if (input.kind === 'ADVENTURER') body = { ...common, className: input.className ?? 'Fighter', ancestry: input.ancestry ?? 'Human', experience: input.experience ?? 0 };
+    else body = { ...common, challengeRating: input.challengeRating ?? 1, monsterType: input.monsterType ?? 'Beast', legendary: input.kind === 'BOSS' ? true : (input.legendary ?? false) };
+    const created = await restPost(typePath(input.kind), body, trace);
+    const creature = await hydrate(created, requirementLevel, trace);
+    trace.push('GraphQL composed the existing REST responses → UI');
+    return { creature, routeTrace: trace, backendCallCount: trace.filter(x => x.includes('GraphQL → REST')).length };
   }
 };
 
-app.all('/graphql', createHandler({
-  schema,
-  rootValue: root
-}));
-
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Lowry site + Lab running on port ${PORT}`);
-});
+app.all('/graphql', createHandler({ schema, rootValue: root }));
+app.listen(PORT, '0.0.0.0', () => console.log(`Lowry site + Lab running on port ${PORT}`));

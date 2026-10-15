@@ -1,8 +1,27 @@
-let kind = 'ADVENTURER';
 let mode = 'GRAPHQL';
+let view = 'MANAGEMENT';
+let kind = 'ADVENTURER';
+let stage = 1;
 
 const $ = id => document.getElementById(id);
 const pretty = value => JSON.stringify(value, null, 2);
+const stageInfo = [
+  { title: 'Simple product', short: 'Core', copy: 'One shared creature shape and battle stats. Everything still feels easy.', next: 'Next: richer creature details.' },
+  { title: 'Richer details', short: 'Details', copy: 'Product now wants abilities and equipment on the same screen.', next: 'Next: add a specialized monster segment.' },
+  { title: 'Monster segment', short: 'Segment', copy: 'Monsters add specialized behavior such as legendary actions.', next: 'Next: introduce a boss segment.' },
+  { title: 'Boss segment + loot', short: 'Boss', copy: 'Boss monsters reuse the same core data but also require a loot table.', next: 'Next: bosses get multi-phase encounters.' },
+  { title: 'Multi-phase bosses', short: 'Phases', copy: 'Boss encounters now need phase data in addition to everything already required.', next: 'Next: one more perfectly reasonable requirement.' },
+  { title: 'Lair actions', short: 'Lair', copy: 'Bosses now need lair actions too. Nothing individually crazy — but the integrations keep accumulating.', next: 'You have reached the full demo.' }
+];
+
+const servicesByStage = [
+  ['Type API','Battle Stats'],
+  ['Type API','Battle Stats','Abilities','Equipment'],
+  ['Type API','Battle Stats','Abilities','Equipment','Legendary Actions'],
+  ['Type API','Battle Stats','Abilities','Equipment','Legendary Actions','Loot'],
+  ['Type API','Battle Stats','Abilities','Equipment','Legendary Actions','Loot','Phases'],
+  ['Type API','Battle Stats','Abilities','Equipment','Legendary Actions','Loot','Phases','Lair Actions']
+];
 
 const creatureFields = `
       id
@@ -13,257 +32,112 @@ const creatureFields = `
       armorClass
       initiative
       speed
-      ... on Adventurer {
-        className
-        ancestry
-        experience
-      }
-      ... on Monster {
-        challengeRating
-        monsterType
-        legendary
-      }`;
+      abilities
+      equipment
+      ... on Adventurer { className ancestry experience }
+      ... on Monster { challengeRating monsterType legendary legendaryActions }
+      ... on BossMonster { challengeRating monsterType legendary legendaryActions loot phases lairActions }`;
 
-for (const button of document.querySelectorAll('.kind')) {
-  button.addEventListener('click', () => {
-    kind = button.dataset.kind;
-    document.querySelectorAll('.kind').forEach(x => x.classList.toggle('active', x === button));
-    $('adventurer-fields').classList.toggle('hidden', kind !== 'ADVENTURER');
-    $('monster-fields').classList.toggle('hidden', kind !== 'MONSTER');
-  });
+function escapeHtml(value){return String(value).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
+function activeServices(){ return servicesByStage[stage-1]; }
+function relevantServices(){
+  const all = ['Type API','Battle Stats'];
+  if(stage>=2) all.push('Abilities','Equipment');
+  if(stage>=3 && kind!=='ADVENTURER') all.push('Legendary Actions');
+  if(kind==='BOSS' && stage>=4) all.push('Loot');
+  if(kind==='BOSS' && stage>=5) all.push('Phases');
+  if(kind==='BOSS' && stage>=6) all.push('Lair Actions');
+  return all;
 }
 
-for (const button of document.querySelectorAll('.mode-button')) {
-  button.addEventListener('click', () => setMode(button.dataset.mode));
-}
-
-function setMode(nextMode) {
-  mode = nextMode;
-  document.querySelectorAll('.mode-button').forEach(x => x.classList.toggle('active', x.dataset.mode === mode));
-
-  const isGraphQL = mode === 'GRAPHQL';
-  $('mode-summary').textContent = isGraphQL
-    ? 'GraphQL mode: the UI asks for a Creature. GraphQL figures out where the pieces live.'
-    : 'Direct REST mode: the UI itself must decide which REST endpoints to call and how to combine them.';
-  $('layman-text').textContent = isGraphQL
-    ? 'You tell one bartender what you want. The bartender knows which shelves and taps to use, gathers everything, and hands you one finished drink.'
-    : 'You are your own bartender. You must know which shelf has the liquor, which tap has the beer, and how to combine everything yourself.';
-  $('flow-middle').innerHTML = isGraphQL
-    ? '🧙 GraphQL<br><small>router / translator</small>'
-    : '🧠 UI routing code<br><small>if monster → this API</small>';
-  $('flow-middle').classList.toggle('router', isGraphQL);
-  $('flow-middle').classList.toggle('warning', !isGraphQL);
-  $('request-caption').textContent = isGraphQL
-    ? 'In GraphQL mode the UI describes the data it wants.'
-    : 'In REST mode the UI contains the endpoint knowledge and orchestration logic.';
-  $('trace-explanation').textContent = isGraphQL
-    ? 'GraphQL owns the backend knowledge. The UI only knows the GraphQL contract.'
-    : 'The UI owns the backend knowledge: type checks, endpoint paths, extra calls, and response merging.';
+function updateStage(){
+  $('stage-number').textContent = stage;
+  const info = stageInfo[stage-1];
+  $('requirement-title').textContent = info.title;
+  $('requirement-copy').textContent = info.copy;
+  $('next-requirement').textContent = info.next;
+  $('add-requirement').disabled = stage===6;
+  $('add-requirement').textContent = stage===6 ? '✓ Full growth scenario reached' : '📣 Product added another requirement';
+  $('stage-track').innerHTML = stageInfo.map((s,i)=>`<div class="stage-dot ${i+1<stage?'done':''} ${i+1===stage?'current':''}"><strong>${i+1}. ${s.short}</strong>${s.title}</div>`).join('');
+  updateArchitecture();
   clearResults();
 }
 
-function clearResults() {
-  $('request-view').textContent = 'Waiting for a summon...';
-  $('response-view').textContent = 'No creature yet.';
-  $('trace').className = 'trace empty';
-  $('trace').textContent = 'Run an action and the request path will appear here.';
-  for (const id of ['browser-calls', 'routing-decisions', 'backend-calls']) $(id).textContent = '—';
-  $('browser-calls-help').textContent = 'Run an action to compare.';
-  $('routing-help').textContent = 'Run an action to compare.';
-}
+function updateArchitecture(){
+  const graph = mode==='GRAPHQL';
+  $('mode-summary').textContent = graph
+    ? 'The UI knows one domain contract. GraphQL owns service selection and response composition.'
+    : 'The UI knows the service topology, segment rules, endpoint paths, and how to merge each response.';
+  $('layman-text').textContent = graph
+    ? 'Customers use one service desk. The desk knows the warehouse layout even as new shelves are added.'
+    : 'Every customer gets a warehouse map and must visit each shelf themselves. Add a shelf, update every map.';
+  $('request-caption').textContent = graph
+    ? 'The consumer describes the creature-shaped data it needs. Backend topology stays behind the facade.'
+    : 'The consumer contains orchestration logic: segment checks, endpoint selection, sequencing, and merging.';
+  $('trace-explanation').textContent = graph
+    ? 'The facade absorbs the backend knowledge and composes existing REST services.'
+    : 'The browser owns the backend knowledge and performs the composition itself.';
 
-async function graphql(query, variables = {}) {
-  const response = await fetch('/graphql', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query, variables })
-  });
-  return response.json();
-}
+  const services = activeServices();
+  const middle = graph ? '<div class="map-node router">GraphQL facade<small>one consumer contract</small></div>' : '<div class="map-node warning">UI orchestration<small>routing + merging rules</small></div>';
+  $('dependency-map').innerHTML = `<div class="map"><div class="map-node">UI<small>Creature screen</small></div><div class="map-arrow">→</div>${middle}<div class="map-arrow">→</div><div class="service-stack">${services.map(s=>`<div class="service ${graph?'':'consumer-known'}">REST: ${s}</div>`).join('')}</div></div>`;
 
-async function rest(path, options = {}) {
-  const response = await fetch(path, options);
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || `REST call failed: ${path}`);
-  return body;
-}
+  const uiEndpoints = graph ? 1 : services.length + (stage>=3 ? 2 : 0); // type variants count as knowledge too
+  const uiBranches = graph ? 0 : Math.max(1, stage) + (stage>=3 ? 2 : 0);
+  const changeSurfaces = graph ? 1 : Math.min(8, stage + 1);
+  const complexity = graph ? Math.min(28, 10 + stage*3) : Math.min(100, 12 + stage*14);
+  $('ui-endpoints').textContent = uiEndpoints;
+  $('ui-branches').textContent = uiBranches;
+  $('backend-services').textContent = services.length;
+  $('change-surfaces').textContent = changeSurfaces;
+  $('complexity-fill').style.width = `${complexity}%`;
+  $('complexity-word').textContent = graph ? (stage<5?'LOW':'CONTROLLED') : (stage<3?'LOW':'HIGH');
+  $('complexity-summary').textContent = graph
+    ? `Backend reuse grows to ${services.length} REST services without exposing that topology to the UI.`
+    : `The UI now carries knowledge of ${uiEndpoints} endpoints and ${uiBranches} routing rules.`;
 
-function readForm() {
-  const common = {
-    name: $('name').value,
-    level: Number($('level').value),
-    hitPoints: Number($('hitPoints').value),
-    armorClass: Number($('armorClass').value)
-  };
+  $('rest-takeaway').textContent = `At stage ${stage}, each consumer must understand more service locations and more segment-specific rules. Multiply that by every UI, client, or integration and change spreads outward.`;
+  $('graphql-takeaway').textContent = `At stage ${stage}, the backend still uses ${services.length} REST services, but consumers still speak to one GraphQL contract. Most change stays inside the composition layer.`;
 
-  if (kind === 'ADVENTURER') {
-    return {
-      ...common,
-      className: $('className').value,
-      ancestry: $('ancestry').value,
-      experience: Number($('experience').value)
-    };
-  }
-
-  return {
-    ...common,
-    challengeRating: Number($('challengeRating').value),
-    monsterType: $('monsterType').value,
-    legendary: $('legendary').checked
-  };
-}
-
-function renderTrace(lines) {
-  $('trace').className = 'trace';
-  $('trace').innerHTML = '';
-  lines.forEach((line, index) => {
-    const step = document.createElement('div');
-    step.className = 'trace-step';
-    step.innerHTML = `<span class="step-number">${index + 1}</span><span>${escapeHtml(line)}</span>`;
-    $('trace').appendChild(step);
-  });
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
-}
-
-function renderMetrics({ browserCalls, routingDecisions, backendCalls }) {
-  $('browser-calls').textContent = browserCalls;
-  $('routing-decisions').textContent = routingDecisions;
-  $('backend-calls').textContent = backendCalls;
-  $('browser-calls-help').textContent = mode === 'GRAPHQL'
-    ? 'One business request crosses the UI boundary.'
-    : 'The UI must make each business REST call itself.';
-  $('routing-help').textContent = mode === 'GRAPHQL'
-    ? 'The UI does not choose backend services.'
-    : 'The UI chooses a type endpoint and a stats endpoint.';
-}
-
-async function createViaGraphQL(formData) {
-  const mutation = `mutation CreateCreature($input: CreateCreatureInput!) {
-  createCreature(input: $input) {
-    creature {${creatureFields}
-    }
-    routeTrace
-  }
-}`;
-
-  const input = { kind, ...formData };
-  $('request-view').textContent = `${mutation}\n\nvariables:\n${pretty({ input })}`;
-
-  const result = await graphql(mutation, { input });
-  if (result.errors) throw new Error(result.errors[0]?.message || 'GraphQL request failed');
-
-  const payload = result.data.createCreature;
-  $('response-view').textContent = pretty(payload.creature);
-  renderTrace(payload.routeTrace);
-  renderMetrics({ browserCalls: 1, routingDecisions: 0, backendCalls: 2 });
-}
-
-async function createViaRest(formData) {
-  const typePath = kind === 'MONSTER' ? '/api/monsters' : '/api/adventurers';
-  const uiPseudoCode = `// The UI has to know the backend layout:
-if (kind === '${kind}') {
-  POST ${typePath}
-  then GET /api/battle-stats/{newId}
-  then merge both JSON responses
-}`;
-  $('request-view').textContent = uiPseudoCode;
-
-  const created = await rest(typePath, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(formData)
-  });
-  const stats = await rest(`/api/battle-stats/${created.id}`);
-  const combined = { ...created, ...stats };
-
-  $('response-view').textContent = pretty(combined);
-  renderTrace([
-    `UI checked the creature type: ${kind}`,
-    `UI → REST POST ${typePath}`,
-    `UI read the new id: ${created.id}`,
-    `UI → REST GET /api/battle-stats/${created.id}`,
-    'UI merged both REST responses itself'
-  ]);
-  renderMetrics({ browserCalls: 2, routingDecisions: 2, backendCalls: 2 });
-}
-
-async function loadViaGraphQL(id) {
-  const query = `query GetCreature($id: ID!) {
-  creature(id: $id) {
-    creature {${creatureFields}
-    }
-    routeTrace
-  }
-}`;
-  $('request-view').textContent = `${query}\n\nvariables:\n${pretty({ id })}`;
-
-  const result = await graphql(query, { id });
-  if (result.errors) throw new Error(result.errors[0]?.message || 'GraphQL request failed');
-
-  const payload = result.data.creature;
-  $('response-view').textContent = pretty(payload.creature);
-  renderTrace(payload.routeTrace);
-  renderMetrics({ browserCalls: 1, routingDecisions: 0, backendCalls: 2 });
-}
-
-async function loadViaRest(id) {
-  const isMonster = id.startsWith('m');
-  const typePath = isMonster ? `/api/monsters/${id}` : `/api/adventurers/${id}`;
-  $('request-view').textContent = `// The UI has to understand what the id means:
-const isMonster = id.startsWith('m');
-GET ${typePath}
-GET /api/battle-stats/${id}
-merge the responses`;
-
-  const [base, stats] = await Promise.all([
-    rest(typePath),
-    rest(`/api/battle-stats/${id}`)
-  ]);
-  const combined = { ...base, ...stats };
-
-  $('response-view').textContent = pretty(combined);
-  renderTrace([
-    `UI inspected id "${id}" and decided it is a ${isMonster ? 'MONSTER' : 'ADVENTURER'}`,
-    `UI → REST GET ${typePath}`,
-    `UI → REST GET /api/battle-stats/${id}`,
-    'UI merged both REST responses itself'
-  ]);
-  renderMetrics({ browserCalls: 2, routingDecisions: 2, backendCalls: 2 });
-}
-
-async function run(action) {
-  try {
-    action === 'create' ? await createCurrent() : await loadCurrent('m2');
-  } catch (error) {
-    $('response-view').textContent = `Error: ${error.message}`;
-    renderTrace(['The request failed before the demo could finish.']);
+  if(view==='DEVELOPER'){
+    $('layman-text').textContent = graph
+      ? 'Resolvers hide service topology, normalize response shapes, and centralize composition logic.'
+      : 'Client code owns endpoint selection, branching, partial-failure handling, and object composition.';
   }
 }
 
-async function createCurrent() {
-  const formData = readForm();
-  if (mode === 'GRAPHQL') return createViaGraphQL(formData);
-  return createViaRest(formData);
+function clearResults(){
+  $('request-view').textContent='Run a request to see the difference.';
+  $('response-view').textContent='No creature yet.';
+  $('trace').className='trace empty'; $('trace').textContent='Run an action and the request path will appear here.';
+  ['browser-calls','routing-decisions','backend-calls','failure-points'].forEach(id=>$(id).textContent='—');
+  $('browser-calls-help').textContent='Run an action.'; $('routing-help').textContent='Run an action.'; $('failure-help').textContent='Places a consumer must know can change/fail.';
 }
 
-async function loadCurrent(id) {
-  if (mode === 'GRAPHQL') return loadViaGraphQL(id);
-  return loadViaRest(id);
-}
+function setMode(next){ mode=next; document.querySelectorAll('.mode-button').forEach(b=>b.classList.toggle('active',b.dataset.mode===mode)); updateArchitecture(); clearResults(); }
+function setView(next){ view=next; document.querySelectorAll('.view-button').forEach(b=>b.classList.toggle('active',b.dataset.view===view)); updateArchitecture(); }
+function setKind(next){ kind=next; document.querySelectorAll('.kind').forEach(b=>b.classList.toggle('active',b.dataset.kind===kind)); $('adventurer-fields').classList.toggle('hidden',kind!=='ADVENTURER'); $('monster-fields').classList.toggle('hidden',kind==='ADVENTURER'); if(kind==='BOSS'){$('legendary').checked=true;$('legendary').disabled=true;$('name').value='Vharos the Budget Destroyer';$('level').value=20;$('hitPoints').value=480;$('armorClass').value=23;} else {$('legendary').disabled=false;} updateArchitecture(); clearResults(); }
 
-$('forge-form').addEventListener('submit', event => {
-  event.preventDefault();
-  run('create');
-});
+document.querySelectorAll('.mode-button').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+document.querySelectorAll('.view-button').forEach(b=>b.addEventListener('click',()=>setView(b.dataset.view)));
+document.querySelectorAll('.kind').forEach(b=>b.addEventListener('click',()=>setKind(b.dataset.kind)));
+$('add-requirement').addEventListener('click',()=>{if(stage<6){stage++; if(stage===4)setKind('BOSS'); updateStage();}});
+$('reset-growth').addEventListener('click',()=>{stage=1; setKind('ADVENTURER'); updateStage();});
 
-$('load-example').addEventListener('click', () => run('load'));
+async function graphql(query,variables={}){const r=await fetch('/graphql',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,variables})});return r.json()}
+async function rest(path,options={}){const r=await fetch(path,options);const body=await r.json();if(!r.ok)throw new Error(body.error||`REST call failed: ${path}`);return body}
+function readForm(){const common={name:$('name').value,level:Number($('level').value),hitPoints:Number($('hitPoints').value),armorClass:Number($('armorClass').value)};if(kind==='ADVENTURER')return{...common,className:$('className').value,ancestry:$('ancestry').value,experience:Number($('experience').value)};return{...common,challengeRating:Number($('challengeRating').value),monsterType:$('monsterType').value,legendary:kind==='BOSS'?true:$('legendary').checked}}
+function renderTrace(lines){$('trace').className='trace';$('trace').innerHTML='';lines.forEach((line,i)=>{const el=document.createElement('div');el.className='trace-step';el.innerHTML=`<span class="step-number">${i+1}</span><span>${escapeHtml(line)}</span>`;$('trace').appendChild(el)})}
+function metrics(backendCalls){const graph=mode==='GRAPHQL';const integrations=relevantServices().length;$('browser-calls').textContent=graph?1:integrations;$('routing-decisions').textContent=graph?0:Math.max(1,integrations-1);$('backend-calls').textContent=backendCalls;$('failure-points').textContent=graph?1:integrations;$('browser-calls-help').textContent=graph?'One business request crosses the consumer boundary.':'The UI makes each required REST request itself.';$('routing-help').textContent=graph?'Service routing lives behind the facade.':'Segment and service decisions live in UI code.';$('failure-help').textContent=graph?'The UI integrates with one contract.':'Each REST dependency is directly coupled to the consumer.'}
+function restPathsFor(idOrKind, isCreate=false){const k=isCreate?idOrKind:(idOrKind.startsWith('a')?'ADVENTURER':idOrKind.startsWith('m')?'MONSTER':'BOSS');const prefix=k==='ADVENTURER'?'adventurers':k==='MONSTER'?'monsters':'bosses';const id=isCreate?null:idOrKind;const paths=[`/api/${prefix}${id?`/${id}`:''}`];if(!isCreate)paths.push(`/api/battle-stats/${id}`);else paths.push('/api/battle-stats/{newId}');if(stage>=2){paths.push(`/api/abilities/${id||'{newId}'}`,`/api/equipment/${id||'{newId}'}`)}if(stage>=3&&k!=='ADVENTURER')paths.push(`/api/legendary-actions/${id||'{newId}'}`);if(k==='BOSS'&&stage>=4)paths.push(`/api/loot/${id||'{newId}'}`);if(k==='BOSS'&&stage>=5)paths.push(`/api/phases/${id||'{newId}'}`);if(k==='BOSS'&&stage>=6)paths.push(`/api/lair-actions/${id||'{newId}'}`);return paths}
+
+async function createViaGraphQL(data){const q=`mutation CreateCreature($input: CreateCreatureInput!, $requirementLevel: Int!) {\n  createCreature(input: $input, requirementLevel: $requirementLevel) {\n    creature {${creatureFields}\n    }\n    routeTrace\n    backendCallCount\n  }\n}`;const input={kind,...data};$('request-view').textContent=`${q}\n\nvariables:\n${pretty({input,requirementLevel:stage})}`;const result=await graphql(q,{input,requirementLevel:stage});if(result.errors)throw new Error(result.errors[0].message);const p=result.data.createCreature;$('response-view').textContent=pretty(p.creature);renderTrace(p.routeTrace);metrics(p.backendCallCount)}
+async function createViaRest(data){const paths=restPathsFor(kind,true);$('request-view').textContent=`// UI orchestration grows with product requirements\nif (kind === '${kind}') {\n${paths.map((p,i)=>`  ${i===0?'POST':'GET '} ${p}`).join('\n')}\n  merge every response into one screen model\n}`;const basePath=paths[0];const created=await rest(basePath,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(data)});const actualPaths=restPathsFor(created.id,false).slice(1);const responses=await Promise.all(actualPaths.map(p=>rest(p)));const combined=Object.assign({},created,...responses);$('response-view').textContent=pretty(combined);renderTrace([`UI checked segment: ${kind}`,`UI → REST POST ${basePath}`,...actualPaths.map(p=>`UI → REST GET ${p}`),'UI merged every response itself']);metrics(1+actualPaths.length)}
+async function loadViaGraphQL(id){const q=`query GetCreature($id: ID!, $requirementLevel: Int!) {\n  creature(id: $id, requirementLevel: $requirementLevel) {\n    creature {${creatureFields}\n    }\n    routeTrace\n    backendCallCount\n  }\n}`;$('request-view').textContent=`${q}\n\nvariables:\n${pretty({id,requirementLevel:stage})}`;const result=await graphql(q,{id,requirementLevel:stage});if(result.errors)throw new Error(result.errors[0].message);const p=result.data.creature;$('response-view').textContent=pretty(p.creature);renderTrace(p.routeTrace);metrics(p.backendCallCount)}
+async function loadViaRest(id){const paths=restPathsFor(id,false);$('request-view').textContent=`// UI infers the segment, then knows every service it needs\n${paths.map(p=>`GET ${p}`).join('\n')}\nmerge the responses`;const responses=await Promise.all(paths.map(p=>rest(p)));const combined=Object.assign({},...responses);$('response-view').textContent=pretty(combined);renderTrace([`UI inspected id "${id}" and selected a segment`,...paths.map(p=>`UI → REST GET ${p}`),'UI merged every response itself']);metrics(paths.length)}
+
+$('forge-form').addEventListener('submit',async e=>{e.preventDefault();try{const data=readForm();if(mode==='GRAPHQL')await createViaGraphQL(data);else await createViaRest(data)}catch(err){$('response-view').textContent=`Error: ${err.message}`;renderTrace(['The request failed before the demo could finish.'])}});
+$('load-example').addEventListener('click',async()=>{setKind('BOSS');try{if(mode==='GRAPHQL')await loadViaGraphQL('b1');else await loadViaRest('b1')}catch(err){$('response-view').textContent=`Error: ${err.message}`}});
 
 setMode('GRAPHQL');
+updateStage();
