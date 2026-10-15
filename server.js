@@ -199,6 +199,16 @@ async function hydrate(base, requirementLevel, trace) {
 
   const resolved = await Promise.all(parts);
   const merged = Object.assign({}, base, ...resolved.filter(Boolean));
+
+  // battle-stats is intentionally a separate REST resource and returns
+  // { battleStats: { initiative, speed } }. Flatten those shared fields onto
+  // the GraphQL Creature object before GraphQL validates non-null fields.
+  if (merged.battleStats) {
+    merged.initiative = merged.battleStats.initiative;
+    merged.speed = merged.battleStats.speed;
+    delete merged.battleStats;
+  }
+
   const typename = base.kind === 'ADVENTURER' ? 'Adventurer' : base.kind === 'MONSTER' ? 'Monster' : 'BossMonster';
   return { ...merged, __typename: typename, legendaryActions: merged.legendaryActions || [], loot: merged.loot || [], phases: merged.phases || [], lairActions: merged.lairActions || [], abilities: merged.abilities || [], equipment: merged.equipment || [] };
 }
