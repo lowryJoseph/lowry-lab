@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Lowry Lab</title>
+  <link rel="stylesheet" href="/lab.css" />
+</head>
+<body>
+  <main class="lab-shell">
+    <header class="hero">
+      <p class="eyebrow">LOWRY LAB</p>
+      <h1>Small experiments, questionable ideas, occasionally useful software.</h1>
+      <p class="lede">A playground for demos, prototypes, and whatever seemed interesting enough to build instead of doing something sensible.</p>
+    </header>
+
+    <section class="apps" aria-label="Lowry Lab apps">
+      <a class="app-card live" href="/graphql-demo/">
+        <div class="app-icon" aria-hidden="true">⚔️</div>
+        <div>
+          <div class="status"><span></span> LIVE</div>
+          <h2>Creature Forge</h2>
+          <p>REST vs GraphQL routing explained with adventurers, monsters, and a suspiciously patient dragon.</p>
+          <strong>Open GraphQL demo →</strong>
+        </div>
+      </a>
+
+      <a class="app-card" href="/npc-generator/">
+        <div class="app-icon" aria-hidden="true">🎲</div>
+        <div>
+          <div class="status building"><span></span> NEXT UP</div>
+          <h2>NPC Generator</h2>
+          <p>A home for the next experiment: generate fantasy citizens with names, jobs, motives, quirks, and probably terrible life choices.</p>
+          <strong>Open placeholder →</strong>
+        </div>
+      </a>
+
+      <article class="app-card future" aria-label="Future experiment placeholder">
+        <div class="app-icon" aria-hidden="true">🧪</div>
+        <div>
+          <div class="status future-status"><span></span> EMPTY SLOT</div>
+          <h2>Whatever We Build Next</h2>
+          <p>The point of the Lab: new demos get another card and another route without rebuilding the whole site.</p>
+          <strong>Awaiting bad idea...</strong>
+        </div>
+      </article>
+    </section>
+
+    <section class="how-it-works">
+      <h2>What is this?</h2>
+      <p><strong>lowryjoseph.com</strong> is the front door. <strong>apps.lowryjoseph.com</strong> is the workshop. Each experiment gets its own path, while one Node server and one Render deployment keep the boring infrastructure out of the way.</p>
+      <div class="route-row">
+        <code>/</code><span>→</span><span>this launcher</span>
+        <code>/graphql-demo</code><span>→</span><span>Creature Forge</span>
+        <code>/npc-generator</code><span>→</span><span>next app</span>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

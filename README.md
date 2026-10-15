@@ -1,24 +1,10 @@
-# Lowry Lab
+# Lowry Site + Lowry Lab
 
-A small Node/Express site that hosts multiple software demos behind one Render deployment.
+One Node/Express service powers two hostnames:
 
-## Routes
+- `lowryjoseph.com` → custom personal landing page
+- `apps.lowryjoseph.com` → Lowry Lab launcher
+- `apps.lowryjoseph.com/graphql-demo/` → Creature Forge
+- `apps.lowryjoseph.com/npc-generator/` → NPC Generator placeholder
 
-- `/` — Lowry Lab launcher
-- `/graphql-demo/` — Creature Forge REST vs GraphQL demo
-- `/npc-generator/` — placeholder for the next app
-- `/graphql` — GraphQL endpoint used by Creature Forge
-- `/api/...` — REST endpoints used by Creature Forge
-
-## Local run
-
-```bash
-npm install
-npm start
-```
-
-Open http://localhost:3000
-
-## Render
-
-The server uses `process.env.PORT || 3000` and listens on `0.0.0.0`, so it is ready for Render.
+The server chooses the root page based on the incoming hostname. Existing REST and GraphQL demo endpoints remain unchanged.

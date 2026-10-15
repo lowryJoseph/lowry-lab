@@ -6,7 +6,19 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static('public'));
+
+// Serve different root pages from the same Render service depending on hostname.
+// lowryjoseph.com -> personal landing page
+// apps.lowryjoseph.com -> Lowry Lab launcher
+app.get('/', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  const file = host === 'lowryjoseph.com' || host === 'www.lowryjoseph.com'
+    ? 'public/main/index.html'
+    : 'public/lab/index.html';
+  res.sendFile(file, { root: process.cwd() });
+});
+
+app.use(express.static('public', { index: false }));
 
 const adventurers = [
   { id: 'a1', kind: 'ADVENTURER', name: 'Brakka Stonehand', level: 7, hitPoints: 62, armorClass: 17, className: 'Barbarian', ancestry: 'Half-Orc', experience: 23000 },
@@ -205,5 +217,5 @@ app.all('/graphql', createHandler({
 }));
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Creature Forge running on port ${PORT}`);
+  console.log(`Lowry site + Lab running on port ${PORT}`);
 });
