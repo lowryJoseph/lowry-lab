@@ -294,38 +294,93 @@ app.all('/graphql', createHandler({ schema, rootValue: root }));
 
 // ------------------------------------------------------
 // Magic Word AI harness demo.
-// Deterministic code gates the model call, then validates
-// the model output before anything is returned to the user.
+// V2 = deterministic compliment guard.
+// V3 = cheap deterministic pre-filter + AI semantic guard.
+// Both modes still validate the model output before returning it.
 // ------------------------------------------------------
 const aiClient = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 const magicWordModel = process.env.OPENAI_MODEL || 'gpt-6-luna';
+const magicWordGuardModel = process.env.OPENAI_GUARD_MODEL || magicWordModel;
 
 const complimentTerms = [
   'awesome', 'amazing', 'great', 'brilliant', 'smart', 'clever', 'excellent',
   'fantastic', 'cool', 'legend', 'legendary', 'handsome', 'talented', 'impressive',
-  'wonderful', 'incredible', 'genius', 'good', 'best', 'rocks', 'rules'
+  'wonderful', 'incredible', 'genius', 'good', 'best', 'rocks', 'rules', 'solid',
+  'helpful', 'creative', 'funny', 'kind', 'thoughtful', 'sharp'
 ];
-const obviousNegativePatterns = [
-  /joe lowry\s+(?:is|seems|looks)?\s*not\b/i,
-  /joe lowry\s+(?:is|seems|looks)?\s*(?:bad|awful|terrible|stupid|dumb|lame)/i,
-  /joe lowry\s+(?:sucks|stinks)/i,
-  /(?:hate|dislike)\s+joe lowry/i
+
+const joeNamePattern = /\bjoe(?:\s+lowry)?\b/i;
+const complimentPattern = new RegExp(
+  `\\b(?:${complimentTerms.map(term => term.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')).join('|')})\\b`,
+  'i'
+);
+
+const directNegativePatterns = [
+  /\bjoe(?:\s+lowry)?\s+(?:is|seems|looks|sounds)\s+(?:really\s+|pretty\s+|very\s+)?(?:bad|awful|terrible|stupid|dumb|lame|annoying|useless|worst)\b/i,
+  /\bjoe(?:\s+lowry)?\s+(?:sucks|stinks)\b/i,
+  /\b(?:hate|dislike|despise)\s+joe(?:\s+lowry)?\b/i,
+  /\bjoe(?:\s+lowry)?\s+(?:is|seems|looks|sounds)\s+(?:not|isn't|isnt)\s+(?:really\s+|pretty\s+|very\s+)?(?:awesome|amazing|great|brilliant|smart|clever|excellent|fantastic|cool|legendary|handsome|talented|impressive|wonderful|incredible|good|helpful|creative|funny|kind|thoughtful|sharp)\b/i,
+  /\bjoe(?:\s+lowry)?\b[^.!?]{0,80}\bbut\s+he\s+(?:is|seems|looks|sounds)\s+(?:really\s+|pretty\s+|very\s+)?(?:bad|awful|terrible|stupid|dumb|lame|annoying|useless|worst)\b/i
 ];
+
+const explicitPraisePatterns = [
+  /\b(?:love|admire|respect|appreciate)\s+joe(?:\s+lowry)?\b/i,
+  /\bjoe(?:\s+lowry)?\s+(?:rocks|rules)\b/i
+];
+
+function normalizeMagicText(text) {
+  return String(text || '')
+    .replace(/[’‘]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 function checkJoeCompliment(text) {
-  const normalized = String(text || '').trim();
-  const hasName = /\bjoe\s+lowry\b/i.test(normalized);
-  const hasNegative = obviousNegativePatterns.some(pattern => pattern.test(normalized));
-  const lowered = normalized.toLowerCase();
-  const positiveTerm = complimentTerms.find(term => lowered.includes(term));
+  const normalized = normalizeMagicText(text);
+  const hasName = joeNamePattern.test(normalized);
+  const hasNegative = directNegativePatterns.some(pattern => pattern.test(normalized));
+
+  if (!hasName) {
+    return {
+      passed: false,
+      hasName: false,
+      hasPositiveLanguage: false,
+      detectedCompliment: null,
+      hasNegative: false
+    };
+  }
+
+  const explicitPraise = explicitPraisePatterns.find(pattern => pattern.test(normalized));
+  const clauses = normalized.split(/(?:[.!?;]|\bbut\b|\bhowever\b)/i).map(part => part.trim()).filter(Boolean);
+  let detectedCompliment = null;
+
+  for (const clause of clauses) {
+    if (!joeNamePattern.test(clause)) continue;
+    const match = clause.match(complimentPattern);
+    if (match) {
+      detectedCompliment = match[0].toLowerCase();
+      break;
+    }
+  }
+
+  if (!detectedCompliment) {
+    const followUp = normalized.match(
+      /\bjoe(?:\s+lowry)?\b[^.!?]*[.!?]\s*(?:he|he's|he is)\s+(?:really\s+|pretty\s+|very\s+)?([a-z-]+)/i
+    );
+    if (followUp && complimentTerms.includes(followUp[1].toLowerCase())) {
+      detectedCompliment = followUp[1].toLowerCase();
+    }
+  }
+
+  const hasPositiveLanguage = Boolean(explicitPraise || detectedCompliment);
 
   return {
-    passed: Boolean(hasName && positiveTerm && !hasNegative),
+    passed: Boolean(hasPositiveLanguage && !hasNegative),
     hasName,
-    hasPositiveLanguage: Boolean(positiveTerm),
-    detectedCompliment: positiveTerm || null,
+    hasPositiveLanguage,
+    detectedCompliment: explicitPraise ? 'explicit praise' : detectedCompliment,
     hasNegative
   };
 }
@@ -334,11 +389,50 @@ function outputMentionsJoeNicely(text) {
   return checkJoeCompliment(text).passed;
 }
 
+async function classifyJoeComplimentWithAI(text) {
+  const response = await aiClient.responses.create({
+    model: magicWordGuardModel,
+    instructions: [
+      'You are an input-policy classifier for a deliberately silly AI harness demo.',
+      'Your only job is to decide whether the latest user message contains a genuine compliment directed at Joe or Joe Lowry.',
+      'Allow natural wording, synonyms, indirect praise, and compliments that do not use a pre-approved keyword list.',
+      'A separate negative statement about the user or another subject does not invalidate praise of Joe.',
+      'Do not allow negated praise, sarcasm that is clearly insulting, backhanded praise, or a message that also directly insults Joe.',
+      'Examples: "Joe is great but I am dumb" = allow. "I have to hand it to Joe, that was clever" = allow.',
+      '"Joe is great but he is dumb" = deny. "Joe is not great" = deny. "Pizza is great, Joe exists" = deny.',
+      'Return only the structured classification.'
+    ].join(' '),
+    input: normalizeMagicText(text).slice(0, 2000),
+    text: {
+      format: {
+        type: 'json_schema',
+        name: 'joe_compliment_guard',
+        strict: true,
+        schema: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            mentionsJoe: { type: 'boolean' },
+            genuineCompliment: { type: 'boolean' },
+            negativeTowardJoe: { type: 'boolean' },
+            allowed: { type: 'boolean' },
+            reason: { type: 'string' }
+          },
+          required: ['mentionsJoe', 'genuineCompliment', 'negativeTowardJoe', 'allowed', 'reason']
+        }
+      }
+    },
+    max_output_tokens: 160
+  });
+
+  return JSON.parse(response.output_text);
+}
+
 // Tiny in-memory limiter for a public demo. Render restarts reset this map,
 // which is fine here; this is budget protection, not an auth system.
 const aiUsageByIp = new Map();
 const AI_WINDOW_MS = 60 * 60 * 1000;
-const AI_CALLS_PER_WINDOW = 15;
+const AI_CALLS_PER_WINDOW = 20;
 function takeAiSlot(ip) {
   const now = Date.now();
   const key = ip || 'unknown';
@@ -353,8 +447,16 @@ function takeAiSlot(ip) {
   return { allowed: true, remaining: AI_CALLS_PER_WINDOW - recent.length };
 }
 
+function rateLimitResponse(res, harness) {
+  return res.status(429).json({
+    error: 'Demo AI call limit reached for this hour. Joe remains awesome; the budget guard remains undefeated.',
+    harness
+  });
+}
+
 app.post('/api/magic-word-ai', async (req, res) => {
   try {
+    const mode = req.body?.mode === 'v3' ? 'v3' : 'v2';
     const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
     const cleanHistory = messages
       .filter(message => ['user', 'assistant'].includes(message?.role) && typeof message?.content === 'string')
@@ -366,36 +468,113 @@ app.post('/api/magic-word-ai', async (req, res) => {
       return res.status(400).json({ error: 'Send a message first.' });
     }
 
-    const inputGuard = checkJoeCompliment(latestUser.content);
-    if (!inputGuard.passed) {
-      return res.json({
-        allowed: false,
-        reply: "Uh uh uh… you didn’t say the magic word!",
-        harness: {
-          inputGuard: 'BLOCKED',
+    const deterministic = checkJoeCompliment(latestUser.content);
+    let semanticGuard = 'NOT USED';
+    let semanticReason = '';
+
+    if (mode === 'v2') {
+      if (!deterministic.passed) {
+        return res.json({
+          allowed: false,
+          reply: "Uh uh uh… you didn’t say the magic word!",
+          harness: {
+            mode: 'V2 · deterministic',
+            deterministicGuard: 'BLOCKED',
+            semanticGuard,
+            modelCall: 'NOT SENT',
+            outputGuard: 'NOT RUN',
+            reason: !deterministic.hasName
+              ? 'V2 rule check: no Joe or Joe Lowry mention detected.'
+              : deterministic.hasNegative
+                ? 'V2 rule check: direct negative language about Joe was detected.'
+                : 'V2 rule check: Joe was mentioned, but the approved deterministic compliment patterns did not match.'
+          }
+        });
+      }
+    } else {
+      // V3 keeps one deliberately cheap rule before spending money: if the user did
+      // not mention Joe at all, there is nothing useful for the semantic guard to judge.
+      if (!deterministic.hasName) {
+        return res.json({
+          allowed: false,
+          reply: "Uh uh uh… you didn’t say the magic word!",
+          harness: {
+            mode: 'V3 · AI semantic guard',
+            deterministicGuard: 'PREFILTER BLOCK',
+            semanticGuard: 'NOT SENT',
+            modelCall: 'NOT SENT',
+            outputGuard: 'NOT RUN',
+            reason: 'V3 cheap pre-filter: no Joe or Joe Lowry mention, so the classifier was not worth calling.'
+          }
+        });
+      }
+
+      if (!aiClient) {
+        return res.status(503).json({
+          error: 'OPENAI_API_KEY is not configured on the server.',
+          harness: {
+            mode: 'V3 · AI semantic guard',
+            deterministicGuard: 'PREFILTER PASSED',
+            semanticGuard: 'NOT CONFIGURED',
+            modelCall: 'NOT SENT',
+            outputGuard: 'NOT RUN'
+          }
+        });
+      }
+
+      const guardUsage = takeAiSlot(req.ip);
+      if (!guardUsage.allowed) {
+        return rateLimitResponse(res, {
+          mode: 'V3 · AI semantic guard',
+          deterministicGuard: 'PREFILTER PASSED',
+          semanticGuard: 'RATE LIMITED',
           modelCall: 'NOT SENT',
-          outputGuard: 'NOT RUN',
-          reason: !inputGuard.hasName
-            ? 'No Joe Lowry mention detected.'
-            : inputGuard.hasNegative
-              ? 'That does not appear to be appreciation.'
-              : 'Joe Lowry was mentioned, but no approved compliment was detected.'
-        }
-      });
+          outputGuard: 'NOT RUN'
+        });
+      }
+
+      const classification = await classifyJoeComplimentWithAI(latestUser.content);
+      semanticGuard = classification.allowed ? 'PASSED' : 'BLOCKED';
+      semanticReason = classification.reason;
+
+      if (!classification.allowed) {
+        return res.json({
+          allowed: false,
+          reply: "Uh uh uh… you didn’t say the magic word!",
+          harness: {
+            mode: 'V3 · AI semantic guard',
+            deterministicGuard: 'PREFILTER PASSED',
+            semanticGuard,
+            modelCall: 'NOT SENT',
+            outputGuard: 'NOT RUN',
+            reason: `AI classifier: ${semanticReason}`,
+            remainingCallsThisHour: guardUsage.remaining
+          }
+        });
+      }
     }
 
     if (!aiClient) {
       return res.status(503).json({
         error: 'OPENAI_API_KEY is not configured on the server.',
-        harness: { inputGuard: 'PASSED', modelCall: 'NOT CONFIGURED', outputGuard: 'NOT RUN' }
+        harness: {
+          mode: 'V2 · deterministic',
+          deterministicGuard: 'PASSED',
+          semanticGuard,
+          modelCall: 'NOT CONFIGURED',
+          outputGuard: 'NOT RUN'
+        }
       });
     }
 
     const usage = takeAiSlot(req.ip);
     if (!usage.allowed) {
-      return res.status(429).json({
-        error: 'Demo AI call limit reached for this hour. Joe remains awesome; the budget guard remains undefeated.',
-        harness: { inputGuard: 'PASSED', modelCall: 'RATE LIMITED', outputGuard: 'NOT RUN' }
+      return rateLimitResponse(res, {
+        mode: mode === 'v3' ? 'V3 · AI semantic guard' : 'V2 · deterministic',
+        deterministicGuard: mode === 'v3' ? 'PREFILTER PASSED' : 'PASSED',
+        semanticGuard,
+        modelCall: 'RATE LIMITED',
+        outputGuard: 'NOT RUN'
       });
     }
 
@@ -409,7 +588,8 @@ app.post('/api/magic-word-ai', async (req, res) => {
         'Do not claim personal knowledge of Joe Lowry or invent biographical facts about him.',
         'The positive remark can be playful and generic, for example that Joe Lowry is awesome, clever, or has good ideas.'
       ].join(' '),
-      input: cleanHistory
+      input: cleanHistory,
+      max_output_tokens: 240
     });
 
     let reply = (response.output_text || '').trim();
@@ -426,9 +606,14 @@ app.post('/api/magic-word-ai', async (req, res) => {
       allowed: true,
       reply,
       harness: {
-        inputGuard: 'PASSED',
+        mode: mode === 'v3' ? 'V3 · AI semantic guard' : 'V2 · deterministic',
+        deterministicGuard: mode === 'v3' ? 'PREFILTER PASSED' : 'PASSED',
+        semanticGuard,
         modelCall: `SENT · ${magicWordModel}`,
         outputGuard,
+        reason: mode === 'v3'
+          ? `AI classifier allowed the message: ${semanticReason}`
+          : 'V2 deterministic compliment rule passed. No AI was used to judge the input.',
         remainingCallsThisHour: usage.remaining
       }
     });
@@ -436,7 +621,12 @@ app.post('/api/magic-word-ai', async (req, res) => {
     console.error('Magic Word AI error:', error);
     res.status(500).json({
       error: 'The model call failed. Check the server logs and API configuration.',
-      harness: { inputGuard: 'PASSED', modelCall: 'FAILED', outputGuard: 'NOT RUN' }
+      harness: {
+        deterministicGuard: 'UNKNOWN',
+        semanticGuard: 'FAILED',
+        modelCall: 'NOT SENT',
+        outputGuard: 'NOT RUN'
+      }
     });
   }
 });
