@@ -40,7 +40,7 @@
           <p>Every message must mention <strong>Joe or Joe Lowry</strong> and genuinely say something nice about him.</p>
         </div>
       </div>
-      <button id="passingExample" type="button">Try a passing example</button>
+      <div class="example-actions"><button id="passingExample" type="button">Try a passing example</button><button id="liveExample" type="button" class="secondary-action">Try a live web example</button></div>
     </section>
 
     <div class="layout">
@@ -93,12 +93,24 @@
           </li>
           <li>
             <span class="step-num">4</span>
+            <div><strong>Web search tool</strong><p>The main model can use live web search when the question needs current information.</p></div>
+            <b id="webStatus" class="status idle">WAITING</b>
+          </li>
+          <li>
+            <span class="step-num">5</span>
             <div><strong>Output guard</strong><p>Deterministic code validates the final answer before you see it.</p></div>
             <b id="outputStatus" class="status idle">WAITING</b>
           </li>
         </ol>
 
         <div id="reasonBox" class="reason">Send a message to watch the harness make decisions.</div>
+
+        <div class="call-details" aria-label="Model call details">
+          <div><span>Model</span><strong id="modelName">—</strong></div>
+          <div><span>Response ID</span><code id="responseId">—</code></div>
+          <div><span>Web search</span><strong id="webUsed">—</strong></div>
+          <div><span>Budget slots left</span><strong id="remainingCalls">—</strong></div>
+        </div>
 
         <div class="lesson">
           <strong id="lessonTitle">V2 lesson</strong>
@@ -110,10 +122,10 @@
     <section class="architecture">
       <p class="eyebrow">REQUEST FLOW</p>
       <div id="flowV2" class="flow">
-        <span>Browser</span><i>→</i><span>Deterministic guard</span><i>→</i><span>Main AI</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
+        <span>Browser</span><i>→</i><span>Deterministic guard</span><i>→</i><span>Main AI + optional web search</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
       </div>
       <div id="flowV3" class="flow hidden">
-        <span>Browser</span><i>→</i><span>Cheap pre-filter</span><i>→</i><span>AI semantic guard</span><i>→</i><span>Main AI</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
+        <span>Browser</span><i>→</i><span>Cheap pre-filter</span><i>→</i><span>AI semantic guard</span><i>→</i><span>Main AI + optional web search</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
       </div>
       <p id="flowCopy">V2 uses no AI to judge the input. A rejected message costs no model call.</p>
     </section>

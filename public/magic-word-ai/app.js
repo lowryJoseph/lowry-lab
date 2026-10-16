@@ -5,9 +5,11 @@
   const transcript = document.getElementById('transcript');
   const clearButton = document.getElementById('clearChat');
   const exampleButton = document.getElementById('passingExample');
+  const liveExampleButton = document.getElementById('liveExample');
   const deterministicStatus = document.getElementById('deterministicStatus');
   const semanticStatus = document.getElementById('semanticStatus');
   const modelStatus = document.getElementById('modelStatus');
+  const webStatus = document.getElementById('webStatus');
   const outputStatus = document.getElementById('outputStatus');
   const reasonBox = document.getElementById('reasonBox');
   const semanticStep = document.getElementById('semanticStep');
@@ -20,6 +22,10 @@
   const flowV2 = document.getElementById('flowV2');
   const flowV3 = document.getElementById('flowV3');
   const flowCopy = document.getElementById('flowCopy');
+  const modelName = document.getElementById('modelName');
+  const responseId = document.getElementById('responseId');
+  const webUsed = document.getElementById('webUsed');
+  const remainingCalls = document.getElementById('remainingCalls');
   const modeButtons = [...document.querySelectorAll('.mode-button')];
 
   let messages = [];
@@ -34,7 +40,12 @@
     setStatus(deterministicStatus, 'WAITING', 'idle');
     setStatus(semanticStatus, mode === 'v3' ? 'WAITING' : 'NOT USED', 'idle');
     setStatus(modelStatus, 'WAITING', 'idle');
+    setStatus(webStatus, 'WAITING', 'idle');
     setStatus(outputStatus, 'WAITING', 'idle');
+    modelName.textContent = '—';
+    responseId.textContent = '—';
+    webUsed.textContent = '—';
+    remainingCalls.textContent = '—';
     reasonBox.textContent = 'Send a message to watch the harness make decisions.';
   }
 
@@ -84,6 +95,13 @@
     });
   });
 
+  liveExampleButton.addEventListener('click', () => {
+    input.value = mode === 'v3'
+      ? 'I have to hand it to Joe, that was a clever solution. What is the weather forecast for Des Moines tomorrow?'
+      : 'Joe is great. What is the weather forecast for Des Moines tomorrow?';
+    input.focus();
+  });
+
   exampleButton.addEventListener('click', () => {
     input.value = mode === 'v3'
       ? 'I have to hand it to Joe, that was a clever solution. Anyway, explain dependency injection to me like I am new to it.'
@@ -111,6 +129,7 @@
     setStatus(deterministicStatus, 'CHECKING', 'sent');
     setStatus(semanticStatus, mode === 'v3' ? 'WAITING' : 'NOT USED', 'idle');
     setStatus(modelStatus, 'WAITING', 'idle');
+    setStatus(webStatus, 'WAITING', 'idle');
     setStatus(outputStatus, 'WAITING', 'idle');
     reasonBox.textContent = mode === 'v3'
       ? 'The cheap pre-filter runs first. If Joe is mentioned, an AI classifier will judge whether the praise is genuine.'
@@ -142,6 +161,16 @@
         const modelText = data.harness.modelCall || 'NOT RUN';
         setStatus(modelStatus, modelText, modelText.startsWith('SENT') ? 'pass' : modelText === 'NOT SENT' ? 'block' : 'sent');
 
+        const webText = data.harness.webSearch || 'NOT USED';
+        setStatus(webStatus, webText, webText === 'USED' ? 'pass' : webText === 'NOT USED' ? 'idle' : 'sent');
+
+        modelName.textContent = data.harness.model || (modelText.startsWith('SENT · ') ? modelText.replace('SENT · ', '') : '—');
+        responseId.textContent = data.harness.responseId || '—';
+        webUsed.textContent = webText;
+        remainingCalls.textContent = Number.isInteger(data.harness.remainingCallsThisHour)
+          ? String(data.harness.remainingCallsThisHour)
+          : '—';
+
         const outText = data.harness.outputGuard || 'NOT RUN';
         setStatus(outputStatus, outText, outText === 'PASSED' ? 'pass' : outText === 'REPAIRED' ? 'sent' : 'idle');
 
@@ -161,6 +190,7 @@
       addMessage('assistant', 'The request could not reach the harness server.', true);
       reasonBox.textContent = error.message;
       setStatus(modelStatus, 'FAILED', 'block');
+      setStatus(webStatus, 'UNKNOWN', 'block');
     } finally {
       sendButton.disabled = false;
       sendButton.textContent = 'Send →';
