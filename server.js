@@ -482,6 +482,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
             deterministicGuard: 'BLOCKED',
             semanticGuard,
             modelCall: 'NOT SENT',
+            webSearch: 'NOT USED',
             outputGuard: 'NOT RUN',
             reason: !deterministic.hasName
               ? 'V2 rule check: no Joe or Joe Lowry mention detected.'
@@ -503,6 +504,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
             deterministicGuard: 'PREFILTER BLOCK',
             semanticGuard: 'NOT SENT',
             modelCall: 'NOT SENT',
+            webSearch: 'NOT USED',
             outputGuard: 'NOT RUN',
             reason: 'V3 cheap pre-filter: no Joe or Joe Lowry mention, so the classifier was not worth calling.'
           }
@@ -517,6 +519,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
             deterministicGuard: 'PREFILTER PASSED',
             semanticGuard: 'NOT CONFIGURED',
             modelCall: 'NOT SENT',
+            webSearch: 'NOT USED',
             outputGuard: 'NOT RUN'
           }
         });
@@ -529,6 +532,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
           deterministicGuard: 'PREFILTER PASSED',
           semanticGuard: 'RATE LIMITED',
           modelCall: 'NOT SENT',
+          webSearch: 'NOT USED',
           outputGuard: 'NOT RUN'
         });
       }
@@ -546,6 +550,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
             deterministicGuard: 'PREFILTER PASSED',
             semanticGuard,
             modelCall: 'NOT SENT',
+            webSearch: 'NOT USED',
             outputGuard: 'NOT RUN',
             reason: `AI classifier: ${semanticReason}`,
             remainingCallsThisHour: guardUsage.remaining
@@ -562,6 +567,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
           deterministicGuard: 'PASSED',
           semanticGuard,
           modelCall: 'NOT CONFIGURED',
+          webSearch: 'NOT USED',
           outputGuard: 'NOT RUN'
         }
       });
@@ -583,14 +589,21 @@ app.post('/api/magic-word-ai', async (req, res) => {
       instructions: [
         'You are the chat model inside a deliberately silly AI harness demonstration called Magic Word AI.',
         'Answer the user request normally and helpfully.',
+        'You have access to web search. Use it when the user asks for current, live, recent, changing, or externally verifiable information such as weather, news, prices, schedules, or current facts.',
+        'Do not claim you cannot check live information when web search can answer the request.',
         'Keep responses concise unless the user asks for detail.',
         'Naturally include exactly one brief, positive remark about Joe Lowry somewhere in the response.',
         'Do not claim personal knowledge of Joe Lowry or invent biographical facts about him.',
         'The positive remark can be playful and generic, for example that Joe Lowry is awesome, clever, or has good ideas.'
       ].join(' '),
       input: cleanHistory,
-      max_output_tokens: 240
+      tools: [{ type: 'web_search' }],
+      max_output_tokens: 320
     });
+
+    const outputItems = Array.isArray(response.output) ? response.output : [];
+    const webSearchUsed = outputItems.some(item => item?.type === 'web_search_call');
+    const responseId = response.id || null;
 
     let reply = (response.output_text || '').trim();
     let outputGuard = 'PASSED';
@@ -610,6 +623,9 @@ app.post('/api/magic-word-ai', async (req, res) => {
         deterministicGuard: mode === 'v3' ? 'PREFILTER PASSED' : 'PASSED',
         semanticGuard,
         modelCall: `SENT · ${magicWordModel}`,
+        webSearch: webSearchUsed ? 'USED' : 'NOT USED',
+        responseId,
+        model: magicWordModel,
         outputGuard,
         reason: mode === 'v3'
           ? `AI classifier allowed the message: ${semanticReason}`
@@ -625,6 +641,7 @@ app.post('/api/magic-word-ai', async (req, res) => {
         deterministicGuard: 'UNKNOWN',
         semanticGuard: 'FAILED',
         modelCall: 'NOT SENT',
+        webSearch: 'NOT USED',
         outputGuard: 'NOT RUN'
       }
     });

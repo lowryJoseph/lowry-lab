@@ -40,3 +40,19 @@ OPENAI_GUARD_MODEL=gpt-6-luna
 ```
 
 If omitted, the guard uses the same model configured in `OPENAI_MODEL`.
+
+## V15 — live web capability + visible call telemetry
+
+The main chatbot now exposes OpenAI's `web_search` tool. The semantic guard does **not** receive web access; it still has one narrow job: decide whether the user genuinely complimented Joe.
+
+The main model decides whether it needs web search. Current/live questions such as weather, news, prices, and schedules can trigger the tool; ordinary conceptual questions normally do not.
+
+The harness panel now reports:
+
+- whether the main model was actually called
+- which model was used
+- the OpenAI response ID
+- whether a web-search tool call occurred
+- remaining in-memory model-call budget slots for the current IP/window
+
+This makes the demo useful for proving that "model capability" comes from tools granted by the harness, not from the model magically having live internet access.
