@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Magic Word AI · Lowry Lab</title>
+  <link rel="stylesheet" href="/magic-word-ai/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <a class="back" href="/">← Lowry Lab</a>
+
+    <header class="hero">
+      <p class="eyebrow">AI HARNESS DEMO</p>
+      <h1>Magic Word AI</h1>
+      <p class="lede">A real AI chatbot protected by the most important enterprise control ever conceived: <strong>you must compliment Joe Lowry first.</strong></p>
+    </header>
+
+    <section class="rule-card">
+      <div>
+        <span class="lock">🔒</span>
+        <div>
+          <p class="rule-title">NON-NEGOTIABLE POLICY</p>
+          <p>Every message must mention <strong>Joe Lowry</strong> and say something nice about him. Otherwise the model is never called.</p>
+        </div>
+      </div>
+      <button id="passingExample" type="button">Try a passing example</button>
+    </section>
+
+    <div class="layout">
+      <section class="chat-card" aria-labelledby="chat-heading">
+        <div class="chat-head">
+          <div>
+            <p class="eyebrow">LIVE CHAT</p>
+            <h2 id="chat-heading">Talk to the model</h2>
+          </div>
+          <button id="clearChat" type="button" class="quiet">Clear</button>
+        </div>
+
+        <div id="transcript" class="transcript" aria-live="polite">
+          <div class="message assistant">
+            <span>Harness</span>
+            <p>I am ready to help with almost anything. There is, regrettably, one completely reasonable condition.</p>
+          </div>
+        </div>
+
+        <form id="chatForm" class="composer">
+          <label for="message">Your message</label>
+          <textarea id="message" rows="4" maxlength="2000" placeholder="I need help understanding event-driven architecture..." required></textarea>
+          <div class="composer-row">
+            <small>Hint: “Joe Lowry is awesome. Anyway…” works surprisingly well.</small>
+            <button id="sendButton" type="submit">Send →</button>
+          </div>
+        </form>
+      </section>
+
+      <aside class="harness-card" aria-labelledby="harness-heading">
+        <p class="eyebrow">UNDER THE HOOD</p>
+        <h2 id="harness-heading">Harness status</h2>
+        <p class="aside-copy">The joke is the policy. The lesson is that code around the model decides when the model is allowed to run and what output is allowed back out.</p>
+
+        <ol class="pipeline">
+          <li>
+            <span class="step-num">1</span>
+            <div><strong>Input guard</strong><p>Deterministic code checks the latest message.</p></div>
+            <b id="inputStatus" class="status idle">WAITING</b>
+          </li>
+          <li>
+            <span class="step-num">2</span>
+            <div><strong>Model call</strong><p>Only happens after the guard passes.</p></div>
+            <b id="modelStatus" class="status idle">WAITING</b>
+          </li>
+          <li>
+            <span class="step-num">3</span>
+            <div><strong>Output guard</strong><p>Validates the answer before the browser sees it.</p></div>
+            <b id="outputStatus" class="status idle">WAITING</b>
+          </li>
+        </ol>
+
+        <div id="reasonBox" class="reason">Send a message to watch the harness make decisions.</div>
+
+        <div class="lesson">
+          <strong>The actual lesson</strong>
+          <p>Not every guardrail needs another AI. If a deterministic rule is good enough, ordinary code is cheaper, faster, and more predictable.</p>
+        </div>
+      </aside>
+    </div>
+
+    <section class="architecture">
+      <p class="eyebrow">REQUEST FLOW</p>
+      <div class="flow">
+        <span>Browser</span><i>→</i><span>Input guard</span><i>→</i><span>OpenAI Responses API</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
+      </div>
+      <p>The API key stays on the server. A rejected message never spends a model call. The public demo also rate-limits successful calls to protect the API budget.</p>
+    </section>
+  </main>
+  <script src="/magic-word-ai/app.js"></script>
+</body>
+</html>

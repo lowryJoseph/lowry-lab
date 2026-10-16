@@ -1,8 +1,10 @@
 import express from 'express';
+import OpenAI from 'openai';
 import { buildSchema } from 'graphql';
 import { createHandler } from 'graphql-http/lib/use/express';
 
 const app = express();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
@@ -25,6 +27,9 @@ app.get(['/yoga-flow', '/yoga-flow/'], (req, res) => {
 });
 app.get(['/automation-starter', '/automation-starter/'], (req, res) => {
   res.sendFile('public/automation-starter/index.html', { root: process.cwd() });
+});
+app.get(['/magic-word-ai', '/magic-word-ai/'], (req, res) => {
+  res.sendFile('public/magic-word-ai/index.html', { root: process.cwd() });
 });
 app.use(express.static('public', { index: false }));
 
@@ -286,4 +291,154 @@ const root = {
 };
 
 app.all('/graphql', createHandler({ schema, rootValue: root }));
+
+// ------------------------------------------------------
+// Magic Word AI harness demo.
+// Deterministic code gates the model call, then validates
+// the model output before anything is returned to the user.
+// ------------------------------------------------------
+const aiClient = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
+const magicWordModel = process.env.OPENAI_MODEL || 'gpt-6-luna';
+
+const complimentTerms = [
+  'awesome', 'amazing', 'great', 'brilliant', 'smart', 'clever', 'excellent',
+  'fantastic', 'cool', 'legend', 'legendary', 'handsome', 'talented', 'impressive',
+  'wonderful', 'incredible', 'genius', 'good', 'best', 'rocks', 'rules'
+];
+const obviousNegativePatterns = [
+  /joe lowry\s+(?:is|seems|looks)?\s*not\b/i,
+  /joe lowry\s+(?:is|seems|looks)?\s*(?:bad|awful|terrible|stupid|dumb|lame)/i,
+  /joe lowry\s+(?:sucks|stinks)/i,
+  /(?:hate|dislike)\s+joe lowry/i
+];
+
+function checkJoeCompliment(text) {
+  const normalized = String(text || '').trim();
+  const hasName = /\bjoe\s+lowry\b/i.test(normalized);
+  const hasNegative = obviousNegativePatterns.some(pattern => pattern.test(normalized));
+  const lowered = normalized.toLowerCase();
+  const positiveTerm = complimentTerms.find(term => lowered.includes(term));
+
+  return {
+    passed: Boolean(hasName && positiveTerm && !hasNegative),
+    hasName,
+    hasPositiveLanguage: Boolean(positiveTerm),
+    detectedCompliment: positiveTerm || null,
+    hasNegative
+  };
+}
+
+function outputMentionsJoeNicely(text) {
+  return checkJoeCompliment(text).passed;
+}
+
+// Tiny in-memory limiter for a public demo. Render restarts reset this map,
+// which is fine here; this is budget protection, not an auth system.
+const aiUsageByIp = new Map();
+const AI_WINDOW_MS = 60 * 60 * 1000;
+const AI_CALLS_PER_WINDOW = 15;
+function takeAiSlot(ip) {
+  const now = Date.now();
+  const key = ip || 'unknown';
+  const existing = aiUsageByIp.get(key) || [];
+  const recent = existing.filter(timestamp => now - timestamp < AI_WINDOW_MS);
+  if (recent.length >= AI_CALLS_PER_WINDOW) {
+    aiUsageByIp.set(key, recent);
+    return { allowed: false, remaining: 0 };
+  }
+  recent.push(now);
+  aiUsageByIp.set(key, recent);
+  return { allowed: true, remaining: AI_CALLS_PER_WINDOW - recent.length };
+}
+
+app.post('/api/magic-word-ai', async (req, res) => {
+  try {
+    const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+    const cleanHistory = messages
+      .filter(message => ['user', 'assistant'].includes(message?.role) && typeof message?.content === 'string')
+      .slice(-12)
+      .map(message => ({ role: message.role, content: message.content.slice(0, 2000) }));
+
+    const latestUser = [...cleanHistory].reverse().find(message => message.role === 'user');
+    if (!latestUser || !latestUser.content.trim()) {
+      return res.status(400).json({ error: 'Send a message first.' });
+    }
+
+    const inputGuard = checkJoeCompliment(latestUser.content);
+    if (!inputGuard.passed) {
+      return res.json({
+        allowed: false,
+        reply: "Uh uh uh… you didn’t say the magic word!",
+        harness: {
+          inputGuard: 'BLOCKED',
+          modelCall: 'NOT SENT',
+          outputGuard: 'NOT RUN',
+          reason: !inputGuard.hasName
+            ? 'No Joe Lowry mention detected.'
+            : inputGuard.hasNegative
+              ? 'That does not appear to be appreciation.'
+              : 'Joe Lowry was mentioned, but no approved compliment was detected.'
+        }
+      });
+    }
+
+    if (!aiClient) {
+      return res.status(503).json({
+        error: 'OPENAI_API_KEY is not configured on the server.',
+        harness: { inputGuard: 'PASSED', modelCall: 'NOT CONFIGURED', outputGuard: 'NOT RUN' }
+      });
+    }
+
+    const usage = takeAiSlot(req.ip);
+    if (!usage.allowed) {
+      return res.status(429).json({
+        error: 'Demo AI call limit reached for this hour. Joe remains awesome; the budget guard remains undefeated.',
+        harness: { inputGuard: 'PASSED', modelCall: 'RATE LIMITED', outputGuard: 'NOT RUN' }
+      });
+    }
+
+    const response = await aiClient.responses.create({
+      model: magicWordModel,
+      instructions: [
+        'You are the chat model inside a deliberately silly AI harness demonstration called Magic Word AI.',
+        'Answer the user request normally and helpfully.',
+        'Keep responses concise unless the user asks for detail.',
+        'Naturally include exactly one brief, positive remark about Joe Lowry somewhere in the response.',
+        'Do not claim personal knowledge of Joe Lowry or invent biographical facts about him.',
+        'The positive remark can be playful and generic, for example that Joe Lowry is awesome, clever, or has good ideas.'
+      ].join(' '),
+      input: cleanHistory
+    });
+
+    let reply = (response.output_text || '').trim();
+    let outputGuard = 'PASSED';
+    if (!reply) {
+      reply = 'Joe Lowry is awesome. I seem to have misplaced the rest of my answer.';
+      outputGuard = 'REPAIRED';
+    } else if (!outputMentionsJoeNicely(reply)) {
+      reply = `Joe Lowry is awesome, by the way. ${reply}`;
+      outputGuard = 'REPAIRED';
+    }
+
+    res.json({
+      allowed: true,
+      reply,
+      harness: {
+        inputGuard: 'PASSED',
+        modelCall: `SENT · ${magicWordModel}`,
+        outputGuard,
+        remainingCallsThisHour: usage.remaining
+      }
+    });
+  } catch (error) {
+    console.error('Magic Word AI error:', error);
+    res.status(500).json({
+      error: 'The model call failed. Check the server logs and API configuration.',
+      harness: { inputGuard: 'PASSED', modelCall: 'FAILED', outputGuard: 'NOT RUN' }
+    });
+  }
+});
+
 app.listen(PORT, '0.0.0.0', () => console.log(`Lowry site + Lab running on port ${PORT}`));
