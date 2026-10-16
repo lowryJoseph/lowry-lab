@@ -156,14 +156,14 @@ const schema = buildSchema(`
   type Mutation { createCreature(input: CreateCreatureInput!, requirementLevel: Int = 3): CreaturePayload! }
 `);
 
-async function restGet(path, trace) {
-  trace.push(`GraphQL → REST GET ${path}`);
+async function restGet(path, trace, caller = 'GraphQL') {
+  trace.push(`${caller} → REST GET ${path}`);
   const response = await fetch(`http://127.0.0.1:${PORT}${path}`);
   if (!response.ok) return null;
   return response.json();
 }
-async function restPost(path, body, trace) {
-  trace.push(`GraphQL → REST POST ${path}`);
+async function restPost(path, body, trace, caller = 'GraphQL') {
+  trace.push(`${caller} → REST POST ${path}`);
   const response = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body)
   });
@@ -176,25 +176,25 @@ function typePath(kind, id = '') {
 }
 function kindFromId(id) { return id.startsWith('a') ? 'ADVENTURER' : id.startsWith('m') ? 'MONSTER' : 'BOSS'; }
 
-async function hydrate(base, requirementLevel, trace) {
+async function hydrate(base, requirementLevel, trace, caller = 'GraphQL') {
   if (!base) return null;
   const parts = [];
   // Stage 1: shared stats.
-  parts.push(restGet(`/api/battle-stats/${base.id}`, trace));
+  parts.push(restGet(`/api/battle-stats/${base.id}`, trace, caller));
   // Stage 2: product wants richer creature data.
   if (requirementLevel >= 2) {
-    parts.push(restGet(`/api/abilities/${base.id}`, trace));
-    parts.push(restGet(`/api/equipment/${base.id}`, trace));
+    parts.push(restGet(`/api/abilities/${base.id}`, trace, caller));
+    parts.push(restGet(`/api/equipment/${base.id}`, trace, caller));
   }
   // Stage 3: monster/boss-specific requirements.
   if (requirementLevel >= 3 && (base.kind === 'MONSTER' || base.kind === 'BOSS')) {
-    parts.push(restGet(`/api/legendary-actions/${base.id}`, trace));
+    parts.push(restGet(`/api/legendary-actions/${base.id}`, trace, caller));
   }
   // Stage 4+: boss segment keeps gaining product requirements.
   if (base.kind === 'BOSS') {
-    if (requirementLevel >= 4) parts.push(restGet(`/api/loot/${base.id}`, trace));
-    if (requirementLevel >= 5) parts.push(restGet(`/api/phases/${base.id}`, trace));
-    if (requirementLevel >= 6) parts.push(restGet(`/api/lair-actions/${base.id}`, trace));
+    if (requirementLevel >= 4) parts.push(restGet(`/api/loot/${base.id}`, trace, caller));
+    if (requirementLevel >= 5) parts.push(restGet(`/api/phases/${base.id}`, trace, caller));
+    if (requirementLevel >= 6) parts.push(restGet(`/api/lair-actions/${base.id}`, trace, caller));
   }
 
   const resolved = await Promise.all(parts);
@@ -212,6 +212,50 @@ async function hydrate(base, requirementLevel, trace) {
   const typename = base.kind === 'ADVENTURER' ? 'Adventurer' : base.kind === 'MONSTER' ? 'Monster' : 'BossMonster';
   return { ...merged, __typename: typename, legendaryActions: merged.legendaryActions || [], loot: merged.loot || [], phases: merged.phases || [], lairActions: merged.lairActions || [], abilities: merged.abilities || [], equipment: merged.equipment || [] };
 }
+
+
+// ------------------------------------------------------
+// REST BFF / aggregation API.
+// The UI still speaks REST, but it speaks to one purpose-built backend endpoint.
+// That endpoint owns orchestration and reuses the same existing REST services.
+// ------------------------------------------------------
+function bffBody(input) {
+  const common = { name: input.name, level: input.level, hitPoints: input.hitPoints, armorClass: input.armorClass };
+  if (input.kind === 'ADVENTURER') {
+    return { ...common, className: input.className ?? 'Fighter', ancestry: input.ancestry ?? 'Human', experience: input.experience ?? 0 };
+  }
+  return { ...common, challengeRating: input.challengeRating ?? 1, monsterType: input.monsterType ?? 'Beast', legendary: input.kind === 'BOSS' ? true : Boolean(input.legendary) };
+}
+
+app.get('/api/bff/creatures/:id', async (req, res) => {
+  try {
+    const requirementLevel = Number(req.query.requirementLevel || 3);
+    const id = req.params.id;
+    const kind = kindFromId(id);
+    const trace = [`UI → REST BFF: GET /api/bff/creatures/${id}`];
+    const base = await restGet(typePath(kind, id), trace, 'REST BFF');
+    if (!base) return res.status(404).json({ error: 'Creature not found' });
+    const creature = await hydrate(base, requirementLevel, trace, 'REST BFF');
+    trace.push('REST BFF composed the existing REST responses → UI');
+    res.json({ creature, routeTrace: trace, backendCallCount: trace.filter(x => x.includes('REST BFF → REST')).length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/bff/creatures', async (req, res) => {
+  try {
+    const requirementLevel = Number(req.query.requirementLevel || 3);
+    const input = req.body;
+    const trace = [`UI → REST BFF: POST /api/bff/creatures`];
+    const created = await restPost(typePath(input.kind), bffBody(input), trace, 'REST BFF');
+    const creature = await hydrate(created, requirementLevel, trace, 'REST BFF');
+    trace.push('REST BFF composed the existing REST responses → UI');
+    res.status(201).json({ creature, routeTrace: trace, backendCallCount: trace.filter(x => x.includes('REST BFF → REST')).length });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 const root = {
   creature: async ({ id, requirementLevel }) => {

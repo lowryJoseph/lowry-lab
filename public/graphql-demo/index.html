@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Creature Forge — REST vs GraphQL</title>
+  <title>Creature Forge — REST vs BFF vs GraphQL</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -23,6 +23,7 @@
         </div>
         <div class="mode-switch" role="group" aria-label="Architecture mode">
           <button type="button" class="mode-button" data-mode="REST">Direct REST</button>
+          <button type="button" class="mode-button" data-mode="BFF">REST BFF</button>
           <button type="button" class="mode-button active" data-mode="GRAPHQL">GraphQL Facade</button>
         </div>
       </div>
@@ -137,11 +138,12 @@
       <div class="section-kicker">The point</div>
       <h2>8. This is not about saving one HTTP call</h2>
       <blockquote>GraphQL does not eliminate complexity. It moves backend composition complexity away from every consumer and into a controlled API layer.</blockquote>
-      <div class="takeaway-grid">
-        <div><h3>As the product grows</h3><p id="rest-takeaway"></p></div>
-        <div><h3>With a GraphQL facade</h3><p id="graphql-takeaway"></p></div>
+      <div class="takeaway-grid three">
+        <div><h3>Direct REST</h3><p id="rest-takeaway"></p></div>
+        <div><h3>REST BFF</h3><p id="bff-takeaway"></p></div>
+        <div><h3>GraphQL</h3><p id="graphql-takeaway"></p></div>
       </div>
-      <p class="bottom-line"><strong>Warehouse analogy:</strong> Direct REST makes every customer learn where every shelf is. GraphQL gives them a service desk. The warehouse can keep the same shelves; the customer asks for the thing they need.</p>
+      <p class="bottom-line"><strong>Warehouse analogy:</strong> Direct REST gives every customer a warehouse map. A REST BFF gives them a staffed pickup counter with a fixed menu. GraphQL gives them a service desk where they can ask for exactly the fields they need. All three can use the same warehouse underneath.</p>
     </section>
   </main>
   <script src="app.js"></script>
