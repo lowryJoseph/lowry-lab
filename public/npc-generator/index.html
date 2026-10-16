@@ -55,8 +55,14 @@
           </section>
 
           <section class="builder-section">
-            <div class="stat-header"><div><strong>2. Attributes</strong><small>Each starts at 8. Spend 24 points. Maximum 15.</small></div><div class="points"><span id="pointsRemaining">24</span><small>remaining</small></div></div>
+            <div class="stat-header"><div><strong>2. Attributes</strong><small>D&amp;D-style point buy: 27 points, base scores 8–15. Higher scores cost more.</small></div><div class="points"><span id="pointsRemaining">27</span><small>point-buy remaining</small></div></div>
             <div id="stats" class="stats-editor"></div>
+            <div class="origin-boosts">
+              <div><strong>Origin boost</strong><small>2024-style +2 to one ability and +1 to another.</small></div>
+              <label>+2 ability<select id="originPlus2"><option>STR</option><option>DEX</option><option>CON</option><option>INT</option><option>WIS</option><option>CHA</option></select></label>
+              <label>+1 ability<select id="originPlus1"><option>STR</option><option>DEX</option><option selected>CON</option><option>INT</option><option>WIS</option><option>CHA</option></select></label>
+            </div>
+            <div class="advancement-box"><div><strong>Level advancement</strong><small id="asiSummary">No ASI points yet — first milestone is level 4.</small></div><div id="asiEditor" class="asi-editor"></div><small class="rules-note">This lightweight builder treats the level 4/8/12/16/19 feat milestones as Ability Score Improvements for clarity; final scores cap at 20.</small></div>
             <div class="stat-actions"><button id="recommendedStats" class="secondary" type="button">Recommended build</button><button id="resetStats" class="secondary" type="button">Reset stats</button></div>
           </section>
 

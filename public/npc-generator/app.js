@@ -134,8 +134,11 @@
     Legendary:['Worldroot Seed — grows a temporary passage through stone','Blade of the First Oath — +3 weapon; strengthens sworn promises','Hourglass of the Seventh Bell — rewind one round once, ever','Crown of Storms — call a violent storm once per week']
   };
 
-  const POINT_POOL = 24, MIN_STAT = 8, MAX_STAT = 15;
+  const POINT_POOL = 27, MIN_STAT = 8, MAX_BASE_STAT = 15, MAX_FINAL_STAT = 20;
+  const POINT_COST = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9};
+  const ASI_LEVELS = [4,8,12,16,19];
   let stats = Object.fromEntries(statDefs.map(([abbr]) => [abbr, MIN_STAT]));
+  let asiBoosts = Object.fromEntries(statDefs.map(([abbr]) => [abbr, 0]));
   let trainedSkills = new Set();
   let inventory = [];
   let currentNpc = null;
@@ -160,10 +163,49 @@
   }
   function renderNpc(){ const n=currentNpc;if(!n)return;$('#npcResult').innerHTML=`<div class="character-name"><div><p class="eyebrow">GENERATED NPC</p><h2>${escapeHtml(n.name)}</h2><p>${escapeHtml(n.ancestry)} ${escapeHtml(n.role)} · ${escapeHtml(n.descriptor)}</p></div><span class="badge">Threat ${n.threat}/8</span></div><div class="derived"><div><small>HP</small><strong>${n.hp}</strong></div><div><small>Defense</small><strong>${n.defense}</strong></div><div><small>Role</small><strong style="font-size:1rem">${escapeHtml(n.role)}</strong></div></div><div class="quick-stats">${statDefs.map(([a])=>`<div class="quick-stat"><small>${a}</small><strong>${n.stats[a]}</strong></div>`).join('')}</div><div class="detail-grid"><div class="detail"><span class="label">Appearance</span><p>${escapeHtml(n.appearance)}</p></div><div class="detail"><span class="label">Mannerism</span><p>${escapeHtml(n.mannerism)}</p></div><div class="detail"><span class="label">What they want</span><p>${escapeHtml(n.want)}</p></div><div class="detail"><span class="label">Secret</span><p>${escapeHtml(n.secret)}</p></div><div class="detail full"><span class="label">Drop them into the game</span><p>${escapeHtml(n.hook)}</p></div></div>`; }
 
-  function pointsSpent(){ return Object.values(stats).reduce((sum,s)=>sum+(s-MIN_STAT),0); }
+  function pointCost(score){ return POINT_COST[score] ?? 999; }
+  function pointsSpent(){ return Object.values(stats).reduce((sum,s)=>sum+pointCost(s),0); }
   function remaining(){ return POINT_POOL-pointsSpent(); }
-  function renderStatEditor(){ $('#pointsRemaining').textContent=remaining();$('#stats').innerHTML=statDefs.map(([abbr,name])=>`<div class="stat-row"><div><span class="stat-name">${name}</span><span class="stat-abbr">${abbr}</span></div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="-1" ${stats[abbr]<=MIN_STAT?'disabled':''}>−</button><div class="stat-score">${stats[abbr]}</div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="1" ${stats[abbr]>=MAX_STAT||remaining()<=0?'disabled':''}>+</button></div>`).join(''); }
-  function recommendedBuild(){ stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));const priority=archetypes[$('#pcArchetype').value].priority;[15,14,13].forEach((v,i)=>stats[priority[i]]=v);let left=remaining(),others=statDefs.map(([a])=>a).filter(a=>!priority.includes(a)),i=0;while(left>0&&i<100){const k=others[i%others.length];if(stats[k]<12){stats[k]++;left--;}i++;}renderStatEditor();suggestSkills(); }
+  function currentLevel(){ return clamp(parseInt($('#pcLevel').value,10)||1,1,20); }
+  function asiBudget(level=currentLevel()){ return ASI_LEVELS.filter(l=>level>=l).length*2; }
+  function asiSpent(){ return Object.values(asiBoosts).reduce((a,b)=>a+b,0); }
+  function originBoosts(){
+    const plus2=$('#originPlus2')?.value || 'STR', plus1=$('#originPlus1')?.value || 'CON';
+    const boosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));
+    boosts[plus2]+=2; boosts[plus1]+=1; return boosts;
+  }
+  function finalStats(){
+    const origin=originBoosts();
+    return Object.fromEntries(statDefs.map(([a])=>[a,Math.min(MAX_FINAL_STAT,stats[a]+origin[a]+asiBoosts[a])]));
+  }
+  function nextPointCost(stat){ if(stats[stat]>=MAX_BASE_STAT)return Infinity; return pointCost(stats[stat]+1)-pointCost(stats[stat]); }
+  function normalizeAsiBudget(){
+    let over=asiSpent()-asiBudget();
+    if(over<=0)return;
+    for(const [a] of [...statDefs].reverse()){ while(over>0&&asiBoosts[a]>0){asiBoosts[a]--;over--;} }
+  }
+  function renderStatEditor(){
+    const final=finalStats();
+    $('#pointsRemaining').textContent=remaining();
+    $('#stats').innerHTML=statDefs.map(([abbr,name])=>`<div class="stat-row"><div><span class="stat-name">${name}</span><span class="stat-abbr">${abbr}</span><small class="final-hint">final ${final[abbr]}</small></div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="-1" ${stats[abbr]<=MIN_STAT?'disabled':''}>−</button><div class="stat-score">${stats[abbr]}</div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="1" ${stats[abbr]>=MAX_BASE_STAT||nextPointCost(abbr)>remaining()?'disabled':''}>+</button></div>`).join('');
+    renderAdvancement();
+  }
+  function renderAdvancement(){
+    normalizeAsiBudget();
+    const budget=asiBudget(),left=budget-asiSpent(),final=finalStats();
+    $('#asiSummary').textContent=budget===0?'No ASI points yet — first milestone is level 4.':`${left} of ${budget} advancement points remaining`;
+    $('#asiEditor').innerHTML=statDefs.map(([abbr,name])=>`<div class="asi-row"><span><strong>${abbr}</strong><small>${name} · +${asiBoosts[abbr]} level boost · final ${final[abbr]}</small></span><button type="button" class="tiny asi-minus" data-stat="${abbr}" ${asiBoosts[abbr]<=0?'disabled':''}>−</button><button type="button" class="tiny asi-plus" data-stat="${abbr}" ${left<=0||final[abbr]>=MAX_FINAL_STAT?'disabled':''}>+</button></div>`).join('');
+  }
+  function recommendedBuild(){
+    stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT])); asiBoosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));
+    const priority=archetypes[$('#pcArchetype').value].priority;
+    const standard=[15,14,13,12,10,8]; priority.forEach((a,i)=>stats[a]=standard[i]??8);
+    const remainingAbilities=statDefs.map(([a])=>a).filter(a=>!priority.includes(a));
+    remainingAbilities.forEach((a,i)=>stats[a]=standard[priority.length+i]??8);
+    $('#originPlus2').value=priority[0]; $('#originPlus1').value=priority[1];
+    let left=asiBudget(); for(const a of priority){while(left>0&&stats[a]+originBoosts()[a]+asiBoosts[a]<MAX_FINAL_STAT){asiBoosts[a]++;left--;}}
+    renderStatEditor();suggestSkills();
+  }
 
   function renderSkills(){ const arch=archetypes[$('#pcArchetype').value];$('#skillsEditor').innerHTML=skillDefs.map(([name,stat])=>`<label class="skill-chip ${arch.skills.includes(name)?'recommended':''}"><input type="checkbox" data-skill="${name}" ${trainedSkills.has(name)?'checked':''}><span><strong>${name}</strong><small>${stat}${arch.skills.includes(name)?' · recommended':''}</small></span></label>`).join('');$('#skillsCount').textContent=trainedSkills.size; }
   function suggestSkills(){ trainedSkills=new Set(archetypes[$('#pcArchetype').value].skills.slice(0,3));const bg=$('#pcBackground').value;const bgMap={Soldier:'Athletics',Urchin:'Sleight of Hand',Scholar:'History',Outlander:'Survival',Merchant:'Persuasion',Artisan:'Investigation',Noble:'Insight',Criminal:'Stealth',Sailor:'Acrobatics'};if(bgMap[bg])trainedSkills.add(bgMap[bg]);renderSkills(); }
@@ -178,19 +220,20 @@
   function addInventory(item){ const clean=String(item||'').trim();if(!clean)return;inventory.push(clean);renderInventory(); }
   function rollLoot(){ const rarity=$('#lootRarity').value;addInventory(`${rarity}: ${pick(lootTables[rarity])}`); }
 
-  function armorDefense(armor){ const dex=mod(stats.DEX);if(armor.dex===true)return armor.base+dex;if(armor.dex==='cap2')return armor.base+Math.min(2,dex);return armor.base; }
-  function skillBonus(name,level){ const def=skillDefs.find(([n])=>n===name);const base=mod(stats[def[1]]);return base+(trainedSkills.has(name)?profBonus(level):0); }
+  function armorDefense(armor, final=finalStats()){ const dex=mod(final.DEX);if(armor.dex===true)return armor.base+dex;if(armor.dex==='cap2')return armor.base+Math.min(2,dex);return armor.base; }
+  function skillBonus(name,level, final=finalStats()){ const def=skillDefs.find(([n])=>n===name);const base=mod(final[def[1]]);return base+(trainedSkills.has(name)?profBonus(level):0); }
 
   function buildCharacter(){
     const ancestry=$('#pcAncestry').value,key=$('#pcArchetype').value,arch=archetypes[key],background=$('#pcBackground').value,outlook=$('#pcOutlook').value,level=clamp(parseInt($('#pcLevel').value,10)||1,1,20);$('#pcLevel').value=level;
     const entered=$('#pcName').value.trim(),name=entered||randomName(ancestry);if(!entered)$('#pcName').value=name;
     const weapon=weapons.find(w=>w.name===$('#pcWeapon').value)||weapons[0],armor=armors.find(a=>a.name===$('#pcArmor').value)||armors[0],packName=$('#pcPack').value;
-    const talent=document.querySelector('input[name="pcTalent"]:checked')?.value||arch.talents[0],hp=Math.max(1,arch.hp+mod(stats.CON)+(level-1)*Math.max(1,Math.floor(arch.hp/2)+mod(stats.CON))),defense=armorDefense(armor),initiative=mod(stats.DEX),speed=ancestry==='Dwarf'||ancestry==='Halfling'?25:30;
+    const final=finalStats();
+    const talent=document.querySelector('input[name="pcTalent"]:checked')?.value||arch.talents[0],hp=Math.max(1,arch.hp+mod(final.CON)+(level-1)*Math.max(1,Math.floor(arch.hp/2)+mod(final.CON))),defense=armorDefense(armor,final),initiative=mod(final.DEX),speed=ancestry==='Dwarf'||ancestry==='Halfling'?25:30;
     const complication=pick(['You owe a favor to someone you hoped never to see again.','Someone important believes you are responsible for a failure that was not entirely yours.','You possess a clue to a mystery you do not yet understand.','You promised to return home after one last journey. This is now the third “last journey.”','A rival keeps arriving one step ahead of you and you have no idea how.','You are carrying something valuable that you cannot safely sell.']);
     const bond=pick(['You would cross a kingdom for the person who once gave you a second chance.','Your old crew is scattered, but you still consider every one of them family.','You are determined to prove that your mentor was right about you.','A small community trusts you more than you think you deserve.','You keep every promise made over a shared meal.']);
-    const bestStat=[...statDefs].sort((a,b)=>stats[b[0]]-stats[a[0]])[0][1],attack=mod(stats[weapon.stat])+profBonus(level),skillRows=skillDefs.map(([n,s])=>({name:n,stat:s,trained:trainedSkills.has(n),bonus:skillBonus(n,level)})).sort((a,b)=>(b.trained-a.trained)||b.bonus-a.bonus);
+    const bestStat=[...statDefs].sort((a,b)=>final[b[0]]-final[a[0]])[0][1],attack=mod(final[weapon.stat])+profBonus(level),skillRows=skillDefs.map(([n,s])=>({name:n,stat:s,trained:trainedSkills.has(n),bonus:skillBonus(n,level,final)})).sort((a,b)=>(b.trained-a.trained)||b.bonus-a.bonus);
     const fullInventory=[...packs[packName],...inventory];
-    return {name,ancestry,key,arch,background,outlook,level,weapon,armor,packName,talent,hp,defense,initiative,speed,attack,skillRows,fullInventory,bond,complication,bestStat,stats:{...stats}};
+    return {name,ancestry,key,arch,background,outlook,level,weapon,armor,packName,talent,hp,defense,initiative,speed,attack,skillRows,fullInventory,bond,complication,bestStat,stats:{...final},baseStats:{...stats},originBoosts:originBoosts(),asiBoosts:{...asiBoosts}};
   }
 
   function renderCharacter(c){
@@ -216,7 +259,7 @@
   $('#rerollNpcName').addEventListener('click',()=>{if(!currentNpc)generateNpc();else{currentNpc.name=randomName(currentNpc.ancestry);renderNpc();}});
   $('#characterForm').addEventListener('submit',e=>{e.preventDefault();forgeCharacter();});
   $('#randomPcName').addEventListener('click',()=>{$('#pcName').value=randomName($('#pcAncestry').value);});
-  $('#resetStats').addEventListener('click',()=>{stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));renderStatEditor();});
+  $('#resetStats').addEventListener('click',()=>{stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));asiBoosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));renderStatEditor();});
   $('#recommendedStats').addEventListener('click',recommendedBuild);
   $('#pcArchetype').addEventListener('change',()=>{renderAbilities();suggestSkills();setRecommendedGear();});
   $('#pcBackground').addEventListener('change',suggestSkills);
@@ -227,7 +270,11 @@
   $('#customItem').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#addCustomItem').click();}});
   $('#inventoryEditor').addEventListener('click',e=>{const b=e.target.closest('.remove-item');if(!b)return;inventory.splice(Number(b.dataset.index),1);renderInventory();});
   $('#skillsEditor').addEventListener('change',e=>{const box=e.target.closest('input[data-skill]');if(!box)return;const name=box.dataset.skill;if(box.checked){if(trainedSkills.size>=4){box.checked=false;return;}trainedSkills.add(name);}else trainedSkills.delete(name);renderSkills();});
-  $('#stats').addEventListener('click',e=>{const btn=e.target.closest('.stat-btn');if(!btn)return;const stat=btn.dataset.stat,delta=Number(btn.dataset.delta);if(delta>0&&(remaining()<=0||stats[stat]>=MAX_STAT))return;if(delta<0&&stats[stat]<=MIN_STAT)return;stats[stat]+=delta;renderStatEditor();});
+  $('#stats').addEventListener('click',e=>{const btn=e.target.closest('.stat-btn');if(!btn)return;const stat=btn.dataset.stat,delta=Number(btn.dataset.delta);if(delta>0&&(stats[stat]>=MAX_BASE_STAT||nextPointCost(stat)>remaining()))return;if(delta<0&&stats[stat]<=MIN_STAT)return;stats[stat]+=delta;renderStatEditor();});
+  $('#asiEditor').addEventListener('click',e=>{const plus=e.target.closest('.asi-plus'),minus=e.target.closest('.asi-minus'),btn=plus||minus;if(!btn)return;const stat=btn.dataset.stat;if(plus){if(asiSpent()>=asiBudget()||finalStats()[stat]>=MAX_FINAL_STAT)return;asiBoosts[stat]++;}else if(asiBoosts[stat]>0)asiBoosts[stat]--;renderStatEditor();});
+  $('#pcLevel').addEventListener('input',()=>{normalizeAsiBudget();renderStatEditor();});
+  $('#originPlus2').addEventListener('change',()=>{if($('#originPlus2').value===$('#originPlus1').value){const fallback=statDefs.map(([a])=>a).find(a=>a!==$('#originPlus2').value);$('#originPlus1').value=fallback;}renderStatEditor();});
+  $('#originPlus1').addEventListener('change',()=>{if($('#originPlus1').value===$('#originPlus2').value){const fallback=statDefs.map(([a])=>a).find(a=>a!==$('#originPlus1').value);$('#originPlus1').value=fallback;}renderStatEditor();});
 
   $('#npcResult').innerHTML='<div class="result-empty"><div><span class="big">🎲</span><strong>No NPC yet.</strong><p>Choose a few constraints or embrace chaos, then generate one.</p></div></div>';
   $('#characterResult').innerHTML='<div class="result-empty"><div><span class="big">🛡️</span><strong>Your full character sheet will appear here.</strong><p>Build manually, or hit Quick build everything and start tweaking.</p></div></div>';
