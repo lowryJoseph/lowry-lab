@@ -1,0 +1,149 @@
+name: Lowry Lab UI Gate
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  browser-tests:
+    name: UI Tests - ${{ matrix.browser }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - browser: chrome
+            install_target: chrome
+            dependency_target: chromium
+
+          - browser: edge
+            install_target: msedge
+            dependency_target: chromium
+
+          - browser: firefox
+            install_target: firefox
+            dependency_target: firefox
+
+          - browser: webkit
+            install_target: webkit
+            dependency_target: webkit
+
+    steps:
+      - name: Checkout Lowry Lab candidate
+        uses: actions/checkout@v6
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install Lowry Lab dependencies
+        run: npm install
+
+      - name: Start Lowry Lab locally
+        run: |
+          PORT=3000 npm start > /tmp/lowry-lab.log 2>&1 &
+          echo $! > /tmp/lowry-lab.pid
+
+      - name: Wait for Lowry Lab
+        run: |
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3000/graphql-demo/ > /dev/null; then
+              echo "Lowry Lab is ready."
+              exit 0
+            fi
+
+            echo "Waiting for Lowry Lab... ($attempt/30)"
+            sleep 2
+          done
+
+          echo "Lowry Lab did not start."
+          cat /tmp/lowry-lab.log || true
+          exit 1
+
+      - name: Checkout Playwright test framework
+        uses: actions/checkout@v6
+        with:
+          repository: lowryJoseph/playwrightStarter
+          ref: main
+          path: playwright-tests
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: playwright-tests/lowry-playwright-starter-v2/pom.xml
+
+      - name: Install Playwright system dependencies
+        working-directory: playwright-tests/lowry-playwright-starter-v2
+        run: >
+          mvn -B exec:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.args="install-deps ${{ matrix.dependency_target }}"
+
+      - name: Install Playwright browser
+        working-directory: playwright-tests/lowry-playwright-starter-v2
+        run: >
+          mvn -B exec:java
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.args="install ${{ matrix.install_target }}"
+
+      - name: Run Creature Forge UI tests
+        working-directory: playwright-tests/lowry-playwright-starter-v2
+        run: >
+          mvn -B test
+          -DbaseUrl=http://127.0.0.1:3000/graphql-demo/
+          -Dbrowser=${{ matrix.browser }}
+          -Dheadless=true
+
+      - name: Collect failure artifacts
+        if: failure()
+        run: |
+          mkdir -p ci-artifacts/${{ matrix.browser }}
+
+          cp /tmp/lowry-lab.log \
+            ci-artifacts/${{ matrix.browser }}/lowry-lab.log \
+            || true
+
+          cp -R \
+            playwright-tests/lowry-playwright-starter-v2/target/surefire-reports \
+            ci-artifacts/${{ matrix.browser }}/surefire-reports \
+            || true
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-failure-${{ matrix.browser }}
+          path: ci-artifacts/${{ matrix.browser }}
+          if-no-files-found: ignore
+
+  ui-gate:
+    name: UI Gate
+    if: always()
+    needs:
+      - browser-tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Require all browser tests to pass
+        run: |
+          echo "Browser matrix result: ${{ needs.browser-tests.result }}"
+
+          if [ "${{ needs.browser-tests.result }}" != "success" ]; then
+            echo "One or more browser UI tests failed."
+            exit 1
+          fi
+
+          echo "All browser UI tests passed."
