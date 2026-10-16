@@ -137,8 +137,13 @@
   const POINT_POOL = 27, MIN_STAT = 8, MAX_BASE_STAT = 15, MAX_FINAL_STAT = 20;
   const POINT_COST = {8:0,9:1,10:2,11:3,12:4,13:5,14:7,15:9};
   const ASI_LEVELS = [4,8,12,16,19];
+  const BACKGROUND_ABILITIES = {
+    Soldier:['STR','DEX','CON'], Urchin:['DEX','WIS','CHA'], Scholar:['INT','WIS','CHA'],
+    Outlander:['STR','CON','WIS'], Merchant:['INT','WIS','CHA'], Artisan:['DEX','INT','WIS'],
+    Noble:['INT','WIS','CHA'], Criminal:['DEX','INT','CHA'], Sailor:['STR','DEX','CON']
+  };
   let stats = Object.fromEntries(statDefs.map(([abbr]) => [abbr, MIN_STAT]));
-  let asiBoosts = Object.fromEntries(statDefs.map(([abbr]) => [abbr, 0]));
+  let asiChoices = Object.fromEntries(ASI_LEVELS.map(level => [level, ['', '']]));
   let trainedSkills = new Set();
   let inventory = [];
   let currentNpc = null;
@@ -167,44 +172,84 @@
   function pointsSpent(){ return Object.values(stats).reduce((sum,s)=>sum+pointCost(s),0); }
   function remaining(){ return POINT_POOL-pointsSpent(); }
   function currentLevel(){ return clamp(parseInt($('#pcLevel').value,10)||1,1,20); }
-  function asiBudget(level=currentLevel()){ return ASI_LEVELS.filter(l=>level>=l).length*2; }
-  function asiSpent(){ return Object.values(asiBoosts).reduce((a,b)=>a+b,0); }
+  function unlockedAsiLevels(level=currentLevel()){ return ASI_LEVELS.filter(l=>level>=l); }
+  function backgroundAbilityOptions(){ return BACKGROUND_ABILITIES[$('#pcBackground').value] || statDefs.map(([a])=>a); }
+  function populateOriginBoosts(preferredPlus2, preferredPlus1){
+    const allowed=backgroundAbilityOptions();
+    const old2=preferredPlus2 || $('#originPlus2')?.value;
+    const old1=preferredPlus1 || $('#originPlus1')?.value;
+    const options=allowed.map(a=>`<option value="${a}">${a}</option>`).join('');
+    $('#originPlus2').innerHTML=options; $('#originPlus1').innerHTML=options;
+    const plus2=allowed.includes(old2)?old2:allowed[0];
+    const plus1=allowed.includes(old1)&&old1!==plus2?old1:(allowed.find(a=>a!==plus2)||allowed[0]);
+    $('#originPlus2').value=plus2; $('#originPlus1').value=plus1;
+    $('#backgroundAbilityHint').textContent=`${$('#pcBackground').value} can boost ${allowed.join(', ')} in this lightweight ruleset.`;
+  }
   function originBoosts(){
-    const plus2=$('#originPlus2')?.value || 'STR', plus1=$('#originPlus1')?.value || 'CON';
     const boosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));
-    boosts[plus2]+=2; boosts[plus1]+=1; return boosts;
+    const plus2=$('#originPlus2')?.value, plus1=$('#originPlus1')?.value;
+    if(plus2) boosts[plus2]+=2;
+    if(plus1 && plus1!==plus2) boosts[plus1]+=1;
+    return boosts;
+  }
+  function levelBoosts(level=currentLevel()){
+    const boosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));
+    for(const milestone of unlockedAsiLevels(level)){
+      for(const ability of (asiChoices[milestone] || [])) if(ability) boosts[ability]+=1;
+    }
+    return boosts;
   }
   function finalStats(){
-    const origin=originBoosts();
-    return Object.fromEntries(statDefs.map(([a])=>[a,Math.min(MAX_FINAL_STAT,stats[a]+origin[a]+asiBoosts[a])]));
+    const origin=originBoosts(), level=levelBoosts();
+    return Object.fromEntries(statDefs.map(([a])=>[a,Math.min(MAX_FINAL_STAT,stats[a]+origin[a]+level[a])]));
   }
   function nextPointCost(stat){ if(stats[stat]>=MAX_BASE_STAT)return Infinity; return pointCost(stats[stat]+1)-pointCost(stats[stat]); }
-  function normalizeAsiBudget(){
-    let over=asiSpent()-asiBudget();
-    if(over<=0)return;
-    for(const [a] of [...statDefs].reverse()){ while(over>0&&asiBoosts[a]>0){asiBoosts[a]--;over--;} }
+  function renderFinalSummary(){
+    const origin=originBoosts(), level=levelBoosts(), final=finalStats();
+    $('#finalStatSummary').innerHTML=statDefs.map(([abbr,name])=>`<div class="final-stat-card"><div><strong>${abbr}</strong><small>${name}</small></div><div class="score-formula"><span>${stats[abbr]}</span><small>base</small></div><b>+</b><div class="score-formula"><span>${origin[abbr]}</span><small>background</small></div><b>+</b><div class="score-formula"><span>${level[abbr]}</span><small>level</small></div><b>=</b><div class="score-formula final"><span>${final[abbr]}</span><small>${modText(final[abbr])} mod</small></div></div>`).join('');
   }
   function renderStatEditor(){
-    const final=finalStats();
     $('#pointsRemaining').textContent=remaining();
-    $('#stats').innerHTML=statDefs.map(([abbr,name])=>`<div class="stat-row"><div><span class="stat-name">${name}</span><span class="stat-abbr">${abbr}</span><small class="final-hint">final ${final[abbr]}</small></div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="-1" ${stats[abbr]<=MIN_STAT?'disabled':''}>−</button><div class="stat-score">${stats[abbr]}</div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="1" ${stats[abbr]>=MAX_BASE_STAT||nextPointCost(abbr)>remaining()?'disabled':''}>+</button></div>`).join('');
-    renderAdvancement();
+    $('#stats').innerHTML=statDefs.map(([abbr,name])=>`<div class="stat-row"><div class="stat-label"><span class="stat-name">${name}</span><span class="stat-abbr">${abbr}</span><small>cost ${pointCost(stats[abbr])} credits</small></div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="-1" ${stats[abbr]<=MIN_STAT?'disabled':''}>−</button><div class="stat-score">${stats[abbr]}</div><button class="stat-btn" type="button" data-stat="${abbr}" data-delta="1" ${stats[abbr]>=MAX_BASE_STAT||nextPointCost(abbr)>remaining()?'disabled':''}>+</button></div>`).join('');
+    renderAdvancement(); renderFinalSummary();
   }
   function renderAdvancement(){
-    normalizeAsiBudget();
-    const budget=asiBudget(),left=budget-asiSpent(),final=finalStats();
-    $('#asiSummary').textContent=budget===0?'No ASI points yet — first milestone is level 4.':`${left} of ${budget} advancement points remaining`;
-    $('#asiEditor').innerHTML=statDefs.map(([abbr,name])=>`<div class="asi-row"><span><strong>${abbr}</strong><small>${name} · +${asiBoosts[abbr]} level boost · final ${final[abbr]}</small></span><button type="button" class="tiny asi-minus" data-stat="${abbr}" ${asiBoosts[abbr]<=0?'disabled':''}>−</button><button type="button" class="tiny asi-plus" data-stat="${abbr}" ${left<=0||final[abbr]>=MAX_FINAL_STAT?'disabled':''}>+</button></div>`).join('');
+    const unlocked=unlockedAsiLevels();
+    if(unlocked.length===0){
+      $('#asiSummary').textContent='No Ability Score Improvement yet. The first opportunity is level 4.';
+      $('#asiEditor').innerHTML='<div class="locked-asi">Level 1–3 characters do not receive extra ability points from leveling.</div>';
+      return;
+    }
+    $('#asiSummary').textContent=`${unlocked.length} Ability Score Improvement ${unlocked.length===1?'choice':'choices'} unlocked at level ${currentLevel()}.`;
+    const abilityOptions='<option value="">Choose ability</option>'+statDefs.map(([a,n])=>`<option value="${a}">${a} — ${n}</option>`).join('');
+    $('#asiEditor').innerHTML=unlocked.map(level=>{
+      const choices=asiChoices[level] || ['', ''];
+      return `<div class="asi-milestone"><div><strong>Level ${level} ASI</strong><small>Same ability twice = +2. Two different abilities = +1 / +1.</small></div><div class="asi-choice-grid"><label>Point 1<select class="asi-choice" data-level="${level}" data-slot="0">${abilityOptions}</select></label><label>Point 2<select class="asi-choice" data-level="${level}" data-slot="1">${abilityOptions}</select></label></div></div>`;
+    }).join('');
+    $$('.asi-choice').forEach(select=>{ const choices=asiChoices[Number(select.dataset.level)] || ['', '']; select.value=choices[Number(select.dataset.slot)] || ''; });
+  }
+  function resetAbilityScores(){
+    stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));
+    asiChoices=Object.fromEntries(ASI_LEVELS.map(level=>[level,['','']]));
+    populateOriginBoosts(); renderStatEditor();
   }
   function recommendedBuild(){
-    stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT])); asiBoosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));
+    stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));
+    asiChoices=Object.fromEntries(ASI_LEVELS.map(level=>[level,['','']]));
     const priority=archetypes[$('#pcArchetype').value].priority;
-    const standard=[15,14,13,12,10,8]; priority.forEach((a,i)=>stats[a]=standard[i]??8);
-    const remainingAbilities=statDefs.map(([a])=>a).filter(a=>!priority.includes(a));
-    remainingAbilities.forEach((a,i)=>stats[a]=standard[priority.length+i]??8);
-    $('#originPlus2').value=priority[0]; $('#originPlus1').value=priority[1];
-    let left=asiBudget(); for(const a of priority){while(left>0&&stats[a]+originBoosts()[a]+asiBoosts[a]<MAX_FINAL_STAT){asiBoosts[a]++;left--;}}
-    renderStatEditor();suggestSkills();
+    const exact27=[15,15,14,10,8,8];
+    const ordered=[...priority, ...statDefs.map(([a])=>a).filter(a=>!priority.includes(a))];
+    ordered.forEach((a,i)=>stats[a]=exact27[i]??8);
+    populateOriginBoosts(priority[0], priority[1]);
+    for(const milestone of unlockedAsiLevels()){
+      const final=finalStats();
+      const first=priority.find(a=>final[a]<MAX_FINAL_STAT) || priority[0];
+      asiChoices[milestone][0]=first;
+      const afterOne={...final,[first]:Math.min(MAX_FINAL_STAT,final[first]+1)};
+      const second=priority.find(a=>afterOne[a]<MAX_FINAL_STAT) || first;
+      asiChoices[milestone][1]=second;
+    }
+    renderStatEditor(); suggestSkills();
   }
 
   function renderSkills(){ const arch=archetypes[$('#pcArchetype').value];$('#skillsEditor').innerHTML=skillDefs.map(([name,stat])=>`<label class="skill-chip ${arch.skills.includes(name)?'recommended':''}"><input type="checkbox" data-skill="${name}" ${trainedSkills.has(name)?'checked':''}><span><strong>${name}</strong><small>${stat}${arch.skills.includes(name)?' · recommended':''}</small></span></label>`).join('');$('#skillsCount').textContent=trainedSkills.size; }
@@ -233,7 +278,7 @@
     const bond=pick(['You would cross a kingdom for the person who once gave you a second chance.','Your old crew is scattered, but you still consider every one of them family.','You are determined to prove that your mentor was right about you.','A small community trusts you more than you think you deserve.','You keep every promise made over a shared meal.']);
     const bestStat=[...statDefs].sort((a,b)=>final[b[0]]-final[a[0]])[0][1],attack=mod(final[weapon.stat])+profBonus(level),skillRows=skillDefs.map(([n,s])=>({name:n,stat:s,trained:trainedSkills.has(n),bonus:skillBonus(n,level,final)})).sort((a,b)=>(b.trained-a.trained)||b.bonus-a.bonus);
     const fullInventory=[...packs[packName],...inventory];
-    return {name,ancestry,key,arch,background,outlook,level,weapon,armor,packName,talent,hp,defense,initiative,speed,attack,skillRows,fullInventory,bond,complication,bestStat,stats:{...final},baseStats:{...stats},originBoosts:originBoosts(),asiBoosts:{...asiBoosts}};
+    return {name,ancestry,key,arch,background,outlook,level,weapon,armor,packName,talent,hp,defense,initiative,speed,attack,skillRows,fullInventory,bond,complication,bestStat,stats:{...final},baseStats:{...stats},originBoosts:originBoosts(),asiBoosts:levelBoosts(level),asiChoices:JSON.parse(JSON.stringify(asiChoices))};
   }
 
   function renderCharacter(c){
@@ -259,10 +304,10 @@
   $('#rerollNpcName').addEventListener('click',()=>{if(!currentNpc)generateNpc();else{currentNpc.name=randomName(currentNpc.ancestry);renderNpc();}});
   $('#characterForm').addEventListener('submit',e=>{e.preventDefault();forgeCharacter();});
   $('#randomPcName').addEventListener('click',()=>{$('#pcName').value=randomName($('#pcAncestry').value);});
-  $('#resetStats').addEventListener('click',()=>{stats=Object.fromEntries(statDefs.map(([a])=>[a,MIN_STAT]));asiBoosts=Object.fromEntries(statDefs.map(([a])=>[a,0]));renderStatEditor();});
+  $('#resetStats').addEventListener('click',resetAbilityScores);
   $('#recommendedStats').addEventListener('click',recommendedBuild);
   $('#pcArchetype').addEventListener('change',()=>{renderAbilities();suggestSkills();setRecommendedGear();});
-  $('#pcBackground').addEventListener('change',suggestSkills);
+  $('#pcBackground').addEventListener('change',()=>{suggestSkills();populateOriginBoosts();renderStatEditor();});
   $('#randomizeGear').addEventListener('click',randomizeGear);
   $('#quickBuild').addEventListener('click',quickBuild);
   $('#rollLoot').addEventListener('click',rollLoot);
@@ -271,12 +316,12 @@
   $('#inventoryEditor').addEventListener('click',e=>{const b=e.target.closest('.remove-item');if(!b)return;inventory.splice(Number(b.dataset.index),1);renderInventory();});
   $('#skillsEditor').addEventListener('change',e=>{const box=e.target.closest('input[data-skill]');if(!box)return;const name=box.dataset.skill;if(box.checked){if(trainedSkills.size>=4){box.checked=false;return;}trainedSkills.add(name);}else trainedSkills.delete(name);renderSkills();});
   $('#stats').addEventListener('click',e=>{const btn=e.target.closest('.stat-btn');if(!btn)return;const stat=btn.dataset.stat,delta=Number(btn.dataset.delta);if(delta>0&&(stats[stat]>=MAX_BASE_STAT||nextPointCost(stat)>remaining()))return;if(delta<0&&stats[stat]<=MIN_STAT)return;stats[stat]+=delta;renderStatEditor();});
-  $('#asiEditor').addEventListener('click',e=>{const plus=e.target.closest('.asi-plus'),minus=e.target.closest('.asi-minus'),btn=plus||minus;if(!btn)return;const stat=btn.dataset.stat;if(plus){if(asiSpent()>=asiBudget()||finalStats()[stat]>=MAX_FINAL_STAT)return;asiBoosts[stat]++;}else if(asiBoosts[stat]>0)asiBoosts[stat]--;renderStatEditor();});
-  $('#pcLevel').addEventListener('input',()=>{normalizeAsiBudget();renderStatEditor();});
-  $('#originPlus2').addEventListener('change',()=>{if($('#originPlus2').value===$('#originPlus1').value){const fallback=statDefs.map(([a])=>a).find(a=>a!==$('#originPlus2').value);$('#originPlus1').value=fallback;}renderStatEditor();});
-  $('#originPlus1').addEventListener('change',()=>{if($('#originPlus1').value===$('#originPlus2').value){const fallback=statDefs.map(([a])=>a).find(a=>a!==$('#originPlus1').value);$('#originPlus1').value=fallback;}renderStatEditor();});
+  $('#asiEditor').addEventListener('change',e=>{const select=e.target.closest('.asi-choice');if(!select)return;const level=Number(select.dataset.level),slot=Number(select.dataset.slot);asiChoices[level][slot]=select.value;renderFinalSummary();});
+  $('#pcLevel').addEventListener('input',()=>{renderStatEditor();});
+  $('#originPlus2').addEventListener('change',()=>{if($('#originPlus2').value===$('#originPlus1').value){const allowed=backgroundAbilityOptions();$('#originPlus1').value=allowed.find(a=>a!==$('#originPlus2').value)||allowed[0];}renderStatEditor();});
+  $('#originPlus1').addEventListener('change',()=>{if($('#originPlus1').value===$('#originPlus2').value){const allowed=backgroundAbilityOptions();$('#originPlus2').value=allowed.find(a=>a!==$('#originPlus1').value)||allowed[0];}renderStatEditor();});
 
   $('#npcResult').innerHTML='<div class="result-empty"><div><span class="big">🎲</span><strong>No NPC yet.</strong><p>Choose a few constraints or embrace chaos, then generate one.</p></div></div>';
   $('#characterResult').innerHTML='<div class="result-empty"><div><span class="big">🛡️</span><strong>Your full character sheet will appear here.</strong><p>Build manually, or hit Quick build everything and start tweaking.</p></div></div>';
-  renderStatEditor();renderSkills();populateGear();renderAbilities();renderInventory();
+  populateOriginBoosts();renderStatEditor();renderSkills();populateGear();renderAbilities();renderInventory();
 })();

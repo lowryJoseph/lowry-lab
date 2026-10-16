@@ -24,3 +24,7 @@ Run locally:
 npm install
 npm start
 ```
+
+
+## v9 ability-score fix
+The character builder now uses a clear four-stage ability flow: 27-credit point buy (8–15), background +2/+1, discrete level ASI choices at 4/8/12/16/19, and a final score summary. The point-buy budget is explicitly labeled as purchase credits rather than raw stat points.

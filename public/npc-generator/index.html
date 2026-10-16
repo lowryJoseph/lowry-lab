@@ -54,16 +54,39 @@
             </div>
           </section>
 
-          <section class="builder-section">
-            <div class="stat-header"><div><strong>2. Attributes</strong><small>D&amp;D-style point buy: 27 points, base scores 8–15. Higher scores cost more.</small></div><div class="points"><span id="pointsRemaining">27</span><small>point-buy remaining</small></div></div>
-            <div id="stats" class="stats-editor"></div>
-            <div class="origin-boosts">
-              <div><strong>Origin boost</strong><small>2024-style +2 to one ability and +1 to another.</small></div>
-              <label>+2 ability<select id="originPlus2"><option>STR</option><option>DEX</option><option>CON</option><option>INT</option><option>WIS</option><option>CHA</option></select></label>
-              <label>+1 ability<select id="originPlus1"><option>STR</option><option>DEX</option><option selected>CON</option><option>INT</option><option>WIS</option><option>CHA</option></select></label>
+          <section class="builder-section ability-builder">
+            <div class="section-title"><span>2. Ability Scores</span><small>Build the base scores first, then apply background and level bonuses.</small></div>
+
+            <div class="ability-step point-buy-box">
+              <div class="ability-step-head">
+                <div><strong>A. Base scores — 27-point buy</strong><small>The 27 are purchase credits, not 27 raw ability points. Scores cost more as they get higher.</small></div>
+                <div class="points"><span id="pointsRemaining">27</span><small>credits left</small></div>
+              </div>
+              <div id="stats" class="stats-editor"></div>
+              <div class="point-cost-key" aria-label="Point buy cost table"><span>8 = 0</span><span>9 = 1</span><span>10 = 2</span><span>11 = 3</span><span>12 = 4</span><span>13 = 5</span><span>14 = 7</span><span>15 = 9</span></div>
             </div>
-            <div class="advancement-box"><div><strong>Level advancement</strong><small id="asiSummary">No ASI points yet — first milestone is level 4.</small></div><div id="asiEditor" class="asi-editor"></div><small class="rules-note">This lightweight builder treats the level 4/8/12/16/19 feat milestones as Ability Score Improvements for clarity; final scores cap at 20.</small></div>
-            <div class="stat-actions"><button id="recommendedStats" class="secondary" type="button">Recommended build</button><button id="resetStats" class="secondary" type="button">Reset stats</button></div>
+
+            <div class="ability-step origin-boosts">
+              <div class="ability-step-head"><div><strong>B. Background ability bonus</strong><small>Use the common 2024-style +2 / +1 option. The choices are limited to abilities that fit the selected background.</small></div></div>
+              <div class="origin-grid">
+                <label>+2 ability<select id="originPlus2"></select></label>
+                <label>+1 ability<select id="originPlus1"></select></label>
+              </div>
+              <small id="backgroundAbilityHint" class="rules-note"></small>
+            </div>
+
+            <div class="ability-step advancement-box">
+              <div class="ability-step-head"><div><strong>C. Level advancement</strong><small id="asiSummary">No Ability Score Improvement yet. The first opportunity is level 4.</small></div></div>
+              <div id="asiEditor" class="asi-editor"></div>
+              <small class="rules-note">For this lightweight builder, each level 4/8/12/16/19 feat opportunity is shown as an Ability Score Improvement. Choose the same ability twice for +2, or two different abilities for +1/+1. Final scores cap at 20.</small>
+            </div>
+
+            <div class="ability-step final-score-box">
+              <div class="ability-step-head"><div><strong>D. Final ability scores</strong><small>This is the number the finished character actually uses.</small></div></div>
+              <div id="finalStatSummary" class="final-stat-summary"></div>
+            </div>
+
+            <div class="stat-actions"><button id="recommendedStats" class="secondary" type="button">Recommended build</button><button id="resetStats" class="secondary" type="button">Reset ability scores</button></div>
           </section>
 
           <section class="builder-section">
