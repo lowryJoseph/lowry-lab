@@ -1,11 +1,1 @@
-# Deploy
-
-Replace the contents of the GitHub repo root with this folder's contents, then:
-
-```bash
-git add .
-git commit -m "Expand GraphQL architecture demo"
-git push origin main
-```
-
-Render should auto-deploy when Auto-Deploy is set to On Commit.
+Replace the contents of the existing Lowry Lab repository root with this package, then commit and push to `main`. Render can redeploy the same Node service; no new service or DNS changes are required.

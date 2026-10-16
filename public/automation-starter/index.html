@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="A minimal Java, Maven, JUnit 5, and Playwright UI automation starter from Lowry Lab." />
+  <title>UI Automation Starter · Lowry Lab</title>
+  <link rel="stylesheet" href="/automation-starter/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <nav class="topbar" aria-label="Project navigation">
+      <a href="/">← Lowry Lab</a>
+      <a href="/graphql-demo/">Open the app this framework tests →</a>
+    </nav>
+
+    <header class="hero">
+      <p class="eyebrow">LOWRY LAB · AUTOMATION STARTER</p>
+      <h1>Clone it. Pick a browser. Run a real UI test.</h1>
+      <p class="lede">A deliberately small cross-browser automation starter built with Java 21, Maven, JUnit 5, and Playwright. It already tests the live Creature Forge app, so you start with something working and expand from there.</p>
+      <div class="actions">
+        <a class="button primary" href="/downloads/lowry-playwright-starter-v2.zip" download>Download starter ZIP</a>
+        <a class="button secondary" href="#architecture">View architecture</a>
+        <span class="button disabled" aria-disabled="true" title="Source repository is being prepared">View source · coming soon</span>
+      </div>
+    </header>
+
+    <section class="proof" aria-label="Starter highlights">
+      <div><strong>4</strong><span>browser targets</span></div>
+      <div><strong>1</strong><span>real page object</span></div>
+      <div><strong>1</strong><span>working E2E test</span></div>
+      <div><strong>0</strong><span>driver executables to manage</span></div>
+    </section>
+
+    <section class="section" id="start">
+      <div class="section-heading">
+        <p class="eyebrow">START HERE</p>
+        <h2>The smallest useful framework.</h2>
+        <p>There is no reporting platform, dependency injection container, API framework, workflow layer, or giant configuration system yet. Every abstraction exists because the starter already needs it.</p>
+      </div>
+
+      <div class="feature-grid">
+        <article class="feature-card">
+          <span class="icon" aria-hidden="true">☕</span>
+          <h3>Java + Maven</h3>
+          <p>Normal <code>pom.xml</code> project. Clone it, resolve dependencies, and run with Maven.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon" aria-hidden="true">🧪</span>
+          <h3>JUnit 5</h3>
+          <p>The test lifecycle stays familiar. <code>BaseTest</code> creates and tears down the browser environment.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon" aria-hidden="true">🎭</span>
+          <h3>Playwright</h3>
+          <p>Modern locators, auto-waiting, isolated browser contexts, and cross-browser automation.</p>
+        </article>
+        <article class="feature-card">
+          <span class="icon" aria-hidden="true">🌐</span>
+          <h3>Cross-browser from day one</h3>
+          <p>Chrome, Edge, Firefox, and WebKit for Safari-engine coverage are already selectable from the command line.</p>
+        </article>
+      </div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-heading">
+        <p class="eyebrow">ARCHITECTURE</p>
+        <h2>Enough structure to grow. Not enough to hide what is happening.</h2>
+      </div>
+
+      <div class="architecture">
+        <div class="node test-node"><strong>CreatureForgeTest</strong><span>describes test intent</span></div>
+        <div class="arrow">↓</div>
+        <div class="node"><strong>CreatureForgePage</strong><span>knows the UI</span></div>
+        <div class="arrow split">↓</div>
+        <div class="middle-row">
+          <div class="node"><strong>BaseTest</strong><span>owns JUnit setup / teardown</span></div>
+          <div class="connector">→</div>
+          <div class="node"><strong>BrowserManager</strong><span>owns browser choice and lifecycle</span></div>
+        </div>
+        <div class="arrow">↓</div>
+        <div class="node playwright-node"><strong>Playwright</strong><span>drives the browser</span></div>
+      </div>
+
+      <div class="responsibility-grid">
+        <article><h3>Test</h3><p>What are we proving?</p></article>
+        <article><h3>Page object</h3><p>How do we interact with this screen?</p></article>
+        <article><h3>BaseTest</h3><p>What happens before and after every test?</p></article>
+        <article><h3>BrowserManager</h3><p>Which browser runs, and how is it created and cleaned up?</p></article>
+      </div>
+    </section>
+
+    <section class="section run-section">
+      <div class="section-heading">
+        <p class="eyebrow">CLONE → CONFIGURE → RUN</p>
+        <h2>The whole onboarding story.</h2>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <div class="step-number">1</div>
+          <div><h3>Have Java 21 and Maven</h3><pre><code>java -version
+mvn -version</code></pre></div>
+        </li>
+        <li>
+          <div class="step-number">2</div>
+          <div><h3>Install the Playwright-managed browsers once</h3><pre><code>mvn test -DskipTests
+mvn exec:java -e \
+  -Dexec.mainClass=com.microsoft.playwright.CLI \
+  -Dexec.args="install chromium firefox webkit"</code></pre></div>
+        </li>
+        <li>
+          <div class="step-number">3</div>
+          <div><h3>Run the included test</h3><pre><code>mvn test</code></pre><p>Chrome is the default. The test runs against the live Creature Forge architecture demo.</p></div>
+        </li>
+      </ol>
+    </section>
+
+    <section class="section browser-section">
+      <div class="section-heading">
+        <p class="eyebrow">BROWSER TARGETS</p>
+        <h2>Same test. Different browser.</h2>
+      </div>
+      <div class="browser-grid">
+        <article><strong>Chrome</strong><code>mvn test -Dbrowser=chrome</code><span>Installed Google Chrome</span></article>
+        <article><strong>Edge</strong><code>mvn test -Dbrowser=edge</code><span>Installed Microsoft Edge</span></article>
+        <article><strong>Firefox</strong><code>mvn test -Dbrowser=firefox</code><span>Playwright Firefox</span></article>
+        <article><strong>Safari-like</strong><code>mvn test -Dbrowser=safari</code><span>Playwright WebKit; not installed Safari</span></article>
+      </div>
+      <div class="watch-callout"><span>Want to watch it?</span><code>mvn test -Dbrowser=chrome -Dheadless=false</code></div>
+    </section>
+
+    <section class="section live-test">
+      <div>
+        <p class="eyebrow">THE INCLUDED TEST</p>
+        <h2>It tests something you can see.</h2>
+        <p>The sample test opens Creature Forge, verifies all three architecture options, selects GraphQL, loads the boss example, verifies a GraphQL request appears, and checks that the UI receives <strong>Vharos, Warden of the Last Gate</strong>.</p>
+        <a class="button secondary" href="/graphql-demo/">Open Creature Forge →</a>
+      </div>
+      <pre><code>Creature Forge
+  ↓
+Direct REST ✓
+REST BFF    ✓
+GraphQL     ✓
+  ↓
+Load boss example
+  ↓
+Verify returned UI</code></pre>
+    </section>
+
+    <section class="section next-section">
+      <p class="eyebrow">THE POINT</p>
+      <h2>Start from working. Add complexity only when the problem earns it.</h2>
+      <p>Version 1 is intentionally not a finished enterprise framework. It is a functional foundation: browser management, test lifecycle, page-object separation, and one real test. Reporting, API setup, configuration, parallel execution, CI, and other layers can be added one decision at a time.</p>
+      <div class="actions">
+        <a class="button primary" href="/downloads/lowry-playwright-starter-v2.zip" download>Download the starter</a>
+        <a class="button secondary" href="/">Back to Lowry Lab</a>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

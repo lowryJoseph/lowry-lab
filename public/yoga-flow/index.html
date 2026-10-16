@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Guided Yoga Flow · Lowry Lab</title>
+  <link rel="stylesheet" href="/yoga-flow/styles.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a href="/" class="back">← Lowry Lab</a>
+      <span class="tag">PRACTICAL TOOL</span>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">GUIDED YOGA FLOW</p>
+      <h1>Pick what you need. Press start. Stop staring at the clock.</h1>
+      <p class="lede">Choose a goal and duration, then follow a timed sequence with side changes, next-pose previews, and optional spoken cues.</p>
+    </section>
+
+    <section id="setup" class="panel setup-panel">
+      <div class="section-heading">
+        <div>
+          <p class="kicker">1 · CHOOSE YOUR FLOW</p>
+          <h2>What does your body need today?</h2>
+        </div>
+      </div>
+
+      <div class="goal-grid" id="goalGrid">
+        <button class="goal-card selected" data-goal="runner-post" type="button"><span>🏃</span><strong>Runner · Post-run</strong><small>Hips, calves, hamstrings, recovery</small></button>
+        <button class="goal-card" data-goal="runner-pre" type="button"><span>⚡</span><strong>Runner · Pre-run</strong><small>Dynamic mobility, no long holds</small></button>
+        <button class="goal-card" data-goal="back" type="button"><span>🧘</span><strong>Gentle Back Mobility</strong><small>Easy movement for spine, hips, and trunk</small></button>
+        <button class="goal-card" data-goal="full" type="button"><span>🌿</span><strong>Full Body</strong><small>Balanced everyday mobility</small></button>
+        <button class="goal-card" data-goal="morning" type="button"><span>☀️</span><strong>Morning</strong><small>Wake up, loosen up, get moving</small></button>
+        <button class="goal-card" data-goal="evening" type="button"><span>🌙</span><strong>Evening</strong><small>Slower holds and a quieter finish</small></button>
+      </div>
+
+      <div class="controls-grid">
+        <label>Duration
+          <select id="duration">
+            <option value="5">5 minutes</option>
+            <option value="10" selected>10 minutes</option>
+            <option value="20">20 minutes</option>
+            <option value="30">30 minutes</option>
+          </select>
+        </label>
+        <label>Guidance
+          <select id="guidance">
+            <option value="normal" selected>Normal cues</option>
+            <option value="minimal">Minimal cues</option>
+            <option value="detailed">Extra guidance</option>
+          </select>
+        </label>
+        <label class="toggle-row"><input id="voice" type="checkbox" checked /> <span>Speak pose changes aloud</span></label>
+      </div>
+
+      <div class="flow-summary" id="flowSummary"></div>
+      <div class="actions"><button id="startBtn" class="primary" type="button">Start Flow →</button></div>
+      <p class="safety">Move comfortably and stop if a pose causes pain, numbness, dizziness, or unusual symptoms. “Back mobility” here is general gentle movement, not medical treatment.</p>
+    </section>
+
+    <section id="player" class="panel player hidden" aria-live="polite">
+      <div class="player-head">
+        <div>
+          <p class="kicker" id="flowName">RUNNER · POST-RUN</p>
+          <h2 id="poseName">Low Lunge</h2>
+          <p class="instruction" id="instruction">Step your left foot forward and let the hips settle comfortably.</p>
+        </div>
+        <div class="overall"><span id="poseCounter">1 / 8</span><small id="overallTime">9:30 remaining</small></div>
+      </div>
+
+      <div class="timer-ring" id="timerRing">
+        <div><strong id="countdown">00:45</strong><span id="sideLabel">LEFT SIDE</span></div>
+      </div>
+
+      <div class="next-box"><span>NEXT</span><strong id="nextPose">Low Lunge · Right Side</strong></div>
+
+      <div class="player-actions">
+        <button id="prevBtn" type="button">← Previous</button>
+        <button id="pauseBtn" class="primary" type="button">Pause</button>
+        <button id="nextBtn" type="button">Next →</button>
+      </div>
+      <div class="secondary-actions">
+        <button id="restartPoseBtn" type="button">Restart pose</button>
+        <button id="endBtn" type="button">End flow</button>
+        <label class="mini-toggle"><input id="voicePlayer" type="checkbox" checked /> Voice cues</label>
+      </div>
+    </section>
+
+    <section id="complete" class="panel complete hidden">
+      <div class="complete-icon">✓</div>
+      <p class="kicker">FLOW COMPLETE</p>
+      <h2>Nice. You actually did the thing.</h2>
+      <p id="completeText">10 minutes of runner recovery finished.</p>
+      <div class="actions"><button id="againBtn" class="primary" type="button">Build another flow</button></div>
+    </section>
+
+    <section class="panel preview-panel">
+      <div class="section-heading"><div><p class="kicker">FLOW PREVIEW</p><h2>What you’ll do</h2></div></div>
+      <ol id="previewList" class="preview-list"></ol>
+    </section>
+  </main>
+  <script src="/yoga-flow/app.js"></script>
+</body>
+</html>

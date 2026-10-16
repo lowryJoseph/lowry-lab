@@ -20,6 +20,12 @@ app.get(['/graphql-demo', '/graphql-demo/'], (req, res) => {
 app.get(['/npc-generator', '/npc-generator/'], (req, res) => {
   res.sendFile('public/npc-generator/index.html', { root: process.cwd() });
 });
+app.get(['/yoga-flow', '/yoga-flow/'], (req, res) => {
+  res.sendFile('public/yoga-flow/index.html', { root: process.cwd() });
+});
+app.get(['/automation-starter', '/automation-starter/'], (req, res) => {
+  res.sendFile('public/automation-starter/index.html', { root: process.cwd() });
+});
 app.use(express.static('public', { index: false }));
 
 // ------------------------------------------------------
