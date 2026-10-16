@@ -65,6 +65,7 @@ function updateStage(){
 }
 
 function updateArchitecture(){
+  $('explanation-label').textContent = view==='DEVELOPER' ? 'Developer version:' : 'Management version:';
   const services = activeServices();
   const graph = mode==='GRAPHQL';
   const bff = mode==='BFF';

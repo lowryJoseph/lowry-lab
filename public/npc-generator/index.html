@@ -16,170 +16,95 @@
     <section class="hero">
       <p class="eyebrow">LOWRY LAB EXPERIMENT #2</p>
       <h1>Fantasy Character Forge</h1>
-      <p>Need a suspicious tavern owner in ten seconds? Generate an NPC. Want someone you could actually play? Build a character and spend the stats yourself.</p>
+      <p>Need a suspicious tavern owner in ten seconds? Generate an NPC. Want someone you could actually play? Build a full character sheet with stats, skills, gear, abilities, inventory, and loot.</p>
     </section>
 
     <section class="mode-switch" aria-label="Choose generator mode">
-      <button class="mode-btn active" type="button" data-mode="npc">
-        <span class="mode-icon">🎲</span>
-        <span><strong>Generate NPC</strong><small>Fast, strange, table-ready</small></span>
-      </button>
-      <button class="mode-btn" type="button" data-mode="character">
-        <span class="mode-icon">🛡️</span>
-        <span><strong>Build Character</strong><small>Choose a concept + spend stat points</small></span>
-      </button>
+      <button class="mode-btn active" type="button" data-mode="npc"><span class="mode-icon">🎲</span><span><strong>Generate NPC</strong><small>Fast, strange, table-ready</small></span></button>
+      <button class="mode-btn" type="button" data-mode="character"><span class="mode-icon">🛡️</span><span><strong>Build Character</strong><small>Full lightweight character sheet</small></span></button>
     </section>
 
     <section id="npcMode" class="mode-panel">
       <div class="workspace">
         <form id="npcForm" class="controls card">
-          <div class="section-title">
-            <span>NPC controls</span>
-            <small>Pick as much or as little as you care about.</small>
-          </div>
-
-          <label>
-            Tone
-            <select id="npcTone">
-              <option value="grounded">Grounded</option>
-              <option value="heroic">Heroic</option>
-              <option value="grim">Grim</option>
-              <option value="weird">Weird</option>
-            </select>
-          </label>
-
-          <label>
-            Role
-            <select id="npcRole">
-              <option value="random">Surprise me</option>
-              <option value="civilian">Civilian</option>
-              <option value="authority">Authority</option>
-              <option value="criminal">Criminal</option>
-              <option value="adventurer">Adventurer</option>
-              <option value="mystic">Mystic</option>
-            </select>
-          </label>
-
-          <label>
-            Ancestry
-            <select id="npcAncestry">
-              <option value="random">Surprise me</option>
-              <option>Human</option>
-              <option>Dwarf</option>
-              <option>Elf</option>
-              <option>Halfling</option>
-              <option>Orc</option>
-              <option>Goblin</option>
-              <option>Dragonborn</option>
-              <option>Tiefling</option>
-            </select>
-          </label>
-
-          <label class="check-row">
-            <input id="npcDangerous" type="checkbox" />
-            <span><strong>Make them dangerous</strong><small>They may look ordinary. They are not.</small></span>
-          </label>
-
+          <div class="section-title"><span>NPC controls</span><small>Pick as much or as little as you care about.</small></div>
+          <label>Tone<select id="npcTone"><option value="grounded">Grounded</option><option value="heroic">Heroic</option><option value="grim">Grim</option><option value="weird">Weird</option></select></label>
+          <label>Role<select id="npcRole"><option value="random">Surprise me</option><option value="civilian">Civilian</option><option value="authority">Authority</option><option value="criminal">Criminal</option><option value="adventurer">Adventurer</option><option value="mystic">Mystic</option></select></label>
+          <label>Ancestry<select id="npcAncestry"><option value="random">Surprise me</option><option>Human</option><option>Dwarf</option><option>Elf</option><option>Halfling</option><option>Orc</option><option>Goblin</option><option>Dragonborn</option><option>Tiefling</option></select></label>
+          <label class="check-row"><input id="npcDangerous" type="checkbox" /><span><strong>Make them dangerous</strong><small>They may look ordinary. They are not.</small></span></label>
           <button class="primary" type="submit">🎲 Generate NPC</button>
           <button id="rerollNpcName" class="secondary" type="button">Reroll name only</button>
         </form>
-
         <article id="npcResult" class="result-card card" aria-live="polite"></article>
       </div>
     </section>
 
     <section id="characterMode" class="mode-panel hidden">
-      <div class="character-grid">
-        <form id="characterForm" class="controls card">
-          <div class="section-title">
-            <span>Character concept</span>
-            <small>Make the big choices. The forge fills in the connective tissue.</small>
-          </div>
-
-          <label>
-            Name
-            <div class="input-with-button">
-              <input id="pcName" type="text" maxlength="40" placeholder="Leave blank for a random name" />
-              <button id="randomPcName" type="button" class="tiny">🎲</button>
+      <div class="character-builder">
+        <form id="characterForm" class="builder card">
+          <section class="builder-section">
+            <div class="section-title"><span>1. Identity</span><small>Who are you?</small></div>
+            <div class="form-grid three">
+              <label>Name<div class="input-with-button"><input id="pcName" type="text" maxlength="40" placeholder="Leave blank for random" /><button id="randomPcName" type="button" class="tiny">🎲</button></div></label>
+              <label>Ancestry<select id="pcAncestry"><option>Human</option><option>Dwarf</option><option>Elf</option><option>Halfling</option><option>Orc</option><option>Goblin</option><option>Dragonborn</option><option>Tiefling</option></select></label>
+              <label>Level<input id="pcLevel" type="number" min="1" max="20" value="1" /></label>
+              <label>Archetype<select id="pcArchetype"><option value="guardian">Guardian</option><option value="scoundrel">Scoundrel</option><option value="arcanist">Arcanist</option><option value="warden">Warden</option><option value="devout">Devout</option><option value="berserker">Berserker</option><option value="minstrel">Minstrel</option></select></label>
+              <label>Background<select id="pcBackground"><option>Soldier</option><option>Urchin</option><option>Scholar</option><option>Outlander</option><option>Merchant</option><option>Artisan</option><option>Noble</option><option>Criminal</option><option>Sailor</option></select></label>
+              <label>Alignment / outlook<select id="pcOutlook"><option>Principled</option><option>Pragmatic</option><option>Rebellious</option><option>Ambitious</option><option>Merciful</option><option>Ruthless</option><option>Curious</option></select></label>
             </div>
-          </label>
+          </section>
 
-          <label>
-            Ancestry
-            <select id="pcAncestry">
-              <option>Human</option>
-              <option>Dwarf</option>
-              <option>Elf</option>
-              <option>Halfling</option>
-              <option>Orc</option>
-              <option>Goblin</option>
-              <option>Dragonborn</option>
-              <option>Tiefling</option>
-            </select>
-          </label>
+          <section class="builder-section">
+            <div class="stat-header"><div><strong>2. Attributes</strong><small>Each starts at 8. Spend 24 points. Maximum 15.</small></div><div class="points"><span id="pointsRemaining">24</span><small>remaining</small></div></div>
+            <div id="stats" class="stats-editor"></div>
+            <div class="stat-actions"><button id="recommendedStats" class="secondary" type="button">Recommended build</button><button id="resetStats" class="secondary" type="button">Reset stats</button></div>
+          </section>
 
-          <label>
-            Archetype
-            <select id="pcArchetype">
-              <option value="guardian">Guardian</option>
-              <option value="scoundrel">Scoundrel</option>
-              <option value="arcanist">Arcanist</option>
-              <option value="warden">Warden</option>
-              <option value="devout">Devout</option>
-              <option value="berserker">Berserker</option>
-              <option value="minstrel">Minstrel</option>
-            </select>
-          </label>
+          <section class="builder-section">
+            <div class="section-title"><span>3. Skills</span><small>Choose up to 4 trained skills. Your archetype suggests good fits.</small></div>
+            <div id="skillsEditor" class="skills-editor"></div>
+            <div class="selection-count"><span id="skillsCount">0</span>/4 trained</div>
+          </section>
 
-          <label>
-            Background
-            <select id="pcBackground">
-              <option>Soldier</option>
-              <option>Urchin</option>
-              <option>Scholar</option>
-              <option>Outlander</option>
-              <option>Merchant</option>
-              <option>Artisan</option>
-              <option>Noble</option>
-              <option>Criminal</option>
-              <option>Sailor</option>
-            </select>
-          </label>
-
-          <label>
-            Level
-            <input id="pcLevel" type="number" min="1" max="20" value="1" />
-          </label>
-
-          <div class="stat-header">
-            <div>
-              <strong>Spend your stat points</strong>
-              <small>Each stat starts at 8. Maximum 15.</small>
+          <section class="builder-section">
+            <div class="section-title"><span>4. Gear</span><small>Choose a starting loadout, then customize it.</small></div>
+            <div class="form-grid three">
+              <label>Weapon<select id="pcWeapon"></select></label>
+              <label>Armor<select id="pcArmor"></select></label>
+              <label>Pack<select id="pcPack"></select></label>
             </div>
-            <div class="points"><span id="pointsRemaining">24</span><small>remaining</small></div>
-          </div>
+            <button id="randomizeGear" class="secondary" type="button">🎲 Randomize starting gear</button>
+          </section>
 
-          <div id="stats" class="stats-editor"></div>
+          <section class="builder-section">
+            <div class="section-title"><span>5. Abilities</span><small>Your archetype grants a signature feature. Pick one extra talent.</small></div>
+            <div id="abilityEditor" class="ability-editor"></div>
+          </section>
 
-          <div class="stat-actions">
-            <button id="recommendedStats" class="secondary" type="button">Recommended build</button>
-            <button id="resetStats" class="secondary" type="button">Reset stats</button>
-          </div>
+          <section class="builder-section">
+            <div class="section-title"><span>6. Inventory & Loot</span><small>Add mundane gear or roll something weird.</small></div>
+            <div class="inventory-tools">
+              <div class="input-with-button wide"><input id="customItem" type="text" maxlength="60" placeholder="Add rope, lockpicks, suspicious cheese..." /><button id="addCustomItem" type="button" class="tiny wide-btn">Add</button></div>
+              <div class="loot-controls"><select id="lootRarity"><option>Common</option><option>Uncommon</option><option>Rare</option><option>Epic</option><option>Legendary</option></select><button id="rollLoot" class="secondary" type="button">✨ Roll loot</button></div>
+            </div>
+            <div id="inventoryEditor" class="inventory-editor"></div>
+          </section>
 
-          <button class="primary" type="submit">🛡️ Forge Character</button>
+          <section class="builder-section final-actions">
+            <button class="primary" type="submit">🛡️ Forge Full Character Sheet</button>
+            <button id="quickBuild" class="secondary" type="button">⚡ Quick build everything</button>
+          </section>
         </form>
 
-        <article id="characterResult" class="result-card card" aria-live="polite"></article>
+        <article id="characterResult" class="result-card card sheet-card" aria-live="polite"></article>
       </div>
     </section>
 
     <section class="why card">
-      <p class="eyebrow">WHY TWO MODES?</p>
-      <h2>Same world. Different jobs.</h2>
-      <p>An NPC generator should remove decisions: click once and get someone useful. A player-character builder should preserve decisions: you choose the concept and decide where the character is strong. The app shares the same underlying fantasy data, but the workflow changes based on what the person is trying to accomplish.</p>
+      <p class="eyebrow">WHY TWO MODES?</p><h2>Same world. Different jobs.</h2>
+      <p>An NPC generator should remove decisions: click once and get someone useful. A player-character builder should preserve decisions: you choose the concept, strengths, skills, equipment, and what kind of weird junk they carry.</p>
     </section>
   </main>
-
   <script src="/npc-generator/app.js"></script>
 </body>
 </html>
