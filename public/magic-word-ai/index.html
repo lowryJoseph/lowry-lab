@@ -13,15 +13,31 @@
     <header class="hero">
       <p class="eyebrow">AI HARNESS DEMO</p>
       <h1>Magic Word AI</h1>
-      <p class="lede">A real AI chatbot protected by the most important enterprise control ever conceived: <strong>you must compliment Joe Lowry first.</strong></p>
+      <p class="lede">A real chatbot protected by the most important enterprise control ever conceived: <strong>you must compliment Joe Lowry first.</strong></p>
     </header>
+
+    <section class="mode-card" aria-labelledby="mode-heading">
+      <div>
+        <p class="eyebrow">COMPARE THE HARNESS</p>
+        <h2 id="mode-heading">Same chatbot. Different gatekeeper.</h2>
+        <p id="modeDescription">V2 uses ordinary deterministic code to decide whether the compliment counts.</p>
+      </div>
+      <div class="mode-toggle" role="group" aria-label="Harness version">
+        <button id="modeV2" class="mode-button active" type="button" data-mode="v2">
+          <strong>V2</strong><span>Deterministic</span>
+        </button>
+        <button id="modeV3" class="mode-button" type="button" data-mode="v3">
+          <strong>V3</strong><span>AI semantic guard</span>
+        </button>
+      </div>
+    </section>
 
     <section class="rule-card">
       <div>
         <span class="lock">🔒</span>
         <div>
           <p class="rule-title">NON-NEGOTIABLE POLICY</p>
-          <p>Every message must mention <strong>Joe Lowry</strong> and say something nice about him. Otherwise the model is never called.</p>
+          <p>Every message must mention <strong>Joe or Joe Lowry</strong> and genuinely say something nice about him.</p>
         </div>
       </div>
       <button id="passingExample" type="button">Try a passing example</button>
@@ -48,7 +64,7 @@
           <label for="message">Your message</label>
           <textarea id="message" rows="4" maxlength="2000" placeholder="I need help understanding event-driven architecture..." required></textarea>
           <div class="composer-row">
-            <small>Hint: “Joe Lowry is awesome. Anyway…” works surprisingly well.</small>
+            <small id="modeHint">V2 hint: “Joe is great. Anyway…” works because “great” is in the deterministic rules.</small>
             <button id="sendButton" type="submit">Send →</button>
           </div>
         </form>
@@ -57,22 +73,27 @@
       <aside class="harness-card" aria-labelledby="harness-heading">
         <p class="eyebrow">UNDER THE HOOD</p>
         <h2 id="harness-heading">Harness status</h2>
-        <p class="aside-copy">The joke is the policy. The lesson is that code around the model decides when the model is allowed to run and what output is allowed back out.</p>
+        <p class="aside-copy">Toggle versions and send the same sentence to see where deterministic rules end and semantic judgment begins.</p>
 
         <ol class="pipeline">
           <li>
             <span class="step-num">1</span>
-            <div><strong>Input guard</strong><p>Deterministic code checks the latest message.</p></div>
-            <b id="inputStatus" class="status idle">WAITING</b>
+            <div><strong id="deterministicLabel">Deterministic input guard</strong><p id="deterministicCopy">V2 decides the compliment entirely with ordinary code.</p></div>
+            <b id="deterministicStatus" class="status idle">WAITING</b>
           </li>
-          <li>
+          <li id="semanticStep" class="muted-step">
             <span class="step-num">2</span>
-            <div><strong>Model call</strong><p>Only happens after the guard passes.</p></div>
-            <b id="modelStatus" class="status idle">WAITING</b>
+            <div><strong>AI semantic guard</strong><p>V3 asks a model whether the praise is genuine and directed at Joe.</p></div>
+            <b id="semanticStatus" class="status idle">NOT USED</b>
           </li>
           <li>
             <span class="step-num">3</span>
-            <div><strong>Output guard</strong><p>Validates the answer before the browser sees it.</p></div>
+            <div><strong>Main model call</strong><p>Only happens after the active input guard allows the message.</p></div>
+            <b id="modelStatus" class="status idle">WAITING</b>
+          </li>
+          <li>
+            <span class="step-num">4</span>
+            <div><strong>Output guard</strong><p>Deterministic code validates the final answer before you see it.</p></div>
             <b id="outputStatus" class="status idle">WAITING</b>
           </li>
         </ol>
@@ -80,18 +101,21 @@
         <div id="reasonBox" class="reason">Send a message to watch the harness make decisions.</div>
 
         <div class="lesson">
-          <strong>The actual lesson</strong>
-          <p>Not every guardrail needs another AI. If a deterministic rule is good enough, ordinary code is cheaper, faster, and more predictable.</p>
+          <strong id="lessonTitle">V2 lesson</strong>
+          <p id="lessonCopy">Deterministic rules are cheap, fast, predictable, and surprisingly useful—but they only understand the cases you explicitly taught them.</p>
         </div>
       </aside>
     </div>
 
     <section class="architecture">
       <p class="eyebrow">REQUEST FLOW</p>
-      <div class="flow">
-        <span>Browser</span><i>→</i><span>Input guard</span><i>→</i><span>OpenAI Responses API</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
+      <div id="flowV2" class="flow">
+        <span>Browser</span><i>→</i><span>Deterministic guard</span><i>→</i><span>Main AI</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
       </div>
-      <p>The API key stays on the server. A rejected message never spends a model call. The public demo also rate-limits successful calls to protect the API budget.</p>
+      <div id="flowV3" class="flow hidden">
+        <span>Browser</span><i>→</i><span>Cheap pre-filter</span><i>→</i><span>AI semantic guard</span><i>→</i><span>Main AI</span><i>→</i><span>Output guard</span><i>→</i><span>Browser</span>
+      </div>
+      <p id="flowCopy">V2 uses no AI to judge the input. A rejected message costs no model call.</p>
     </section>
   </main>
   <script src="/magic-word-ai/app.js"></script>
