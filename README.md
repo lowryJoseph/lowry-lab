@@ -1,11 +1,12 @@
-# Lowry Site v11
+# Lowry Lab v18
 
-Adds the UI Automation Starter project page to Lowry Lab.
+Includes TrollSure V1.1 with claims adjudication and printable fantasy benefits documents, plus the existing Lowry Lab demos.
 
-Routes include:
-- `/graphql-demo/`
-- `/npc-generator/`
-- `/yoga-flow/`
-- `/automation-starter/`
+Run locally:
 
-The automation page includes a downloadable copy of `lowry-playwright-starter-v2.zip`. The View Source control is intentionally disabled until the standalone framework repository URL is ready.
+```bash
+npm install
+npm start
+```
+
+Then open `http://localhost:3000/trollsure/`.

@@ -31,6 +31,9 @@ app.get(['/automation-starter', '/automation-starter/'], (req, res) => {
 app.get(['/magic-word-ai', '/magic-word-ai/'], (req, res) => {
   res.sendFile('public/magic-word-ai/index.html', { root: process.cwd() });
 });
+app.get(['/trollsure', '/trollsure/'], (req, res) => {
+  res.sendFile('public/trollsure/index.html', { root: process.cwd() });
+});
 app.use(express.static('public', { index: false }));
 
 // ------------------------------------------------------
@@ -647,5 +650,462 @@ app.post('/api/magic-word-ai', async (req, res) => {
     });
   }
 });
+
+
+// ------------------------------------------------------
+// TrollSure — deliberately fake group-benefits architecture demo.
+// Domain REST APIs are the source of truth. The REST BFF and GraphQL
+// facade both orchestrate those same APIs so the UI can compare contracts.
+// ------------------------------------------------------
+const trollProducts = [
+  { code: 'TROLL', name: 'Troll Insurance', kind: 'CORE', rates: { individual: 100, plusOne: 175, family: 240 } },
+  { code: 'GOBLIN', name: 'Goblin Theft Protection', kind: 'ADD_ON', deductible: 100, rates: { individual: 15, plusOne: 25, family: 35 } },
+  { code: 'DRAGON', name: 'Dragon Singe Protection', kind: 'ADD_ON', deductible: 50, rates: { individual: 10, plusOne: 17, family: 24 } }
+];
+
+const trollPlans = [
+  { code: 'WOOD', name: 'Wooden Shield', rateMultiplier: 0.82, deductible: 2000, battleCostSharePct: 30, maxQuestBurden: 8000 },
+  { code: 'IRON', name: 'Iron Shield', rateMultiplier: 1.00, deductible: 1000, battleCostSharePct: 20, maxQuestBurden: 6000 },
+  { code: 'MITHRIL', name: 'Mithril Shield', rateMultiplier: 1.25, deductible: 500, battleCostSharePct: 10, maxQuestBurden: 4000 }
+];
+
+const trollEligibilityClasses = [
+  { code: 'GUILDMASTER', name: 'Guild Master', eligible: true, note: 'Eligible immediately.' },
+  { code: 'FULL_TIME', name: 'Full-Time Adventurer', eligible: true, note: 'Eligible for guild benefits.' },
+  { code: 'APPRENTICE', name: 'Apprentice', eligible: true, note: 'Eligible in this demo.' },
+  { code: 'SEASONAL', name: 'Seasonal Mercenary', eligible: false, note: 'Not eligible for TrollSure in V1.' }
+];
+
+const trollGroups = [];
+const trollQuotes = [];
+const trollEnrollments = [];
+const trollClaims = [];
+let trollGroupSeq = 1000;
+let trollQuoteSeq = 2000;
+let trollEnrollmentSeq = 3000;
+let trollClaimSeq = 4000;
+
+function trollTier(dependents = 0) {
+  if (dependents <= 0) return 'individual';
+  if (dependents === 1) return 'plusOne';
+  return 'family';
+}
+function trollGroupClass(memberCount) { return memberCount <= 10 ? 'SMALL' : 'LARGE'; }
+function trollPlan(code) { return trollPlans.find(plan => plan.code === code) || trollPlans[1]; }
+function trollEligibility(code) { return trollEligibilityClasses.find(item => item.code === code) || trollEligibilityClasses[1]; }
+function trollRound(value) { return Math.round((Number(value) + Number.EPSILON) * 100) / 100; }
+function trollEffectiveDate(waitingPeriodDays = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + Math.max(0, Number(waitingPeriodDays || 0)));
+  const effective = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
+  return effective.toISOString().slice(0, 10);
+}
+
+function trollRateQuote({ groupName, location, members, products, planCode, guildContributionPct, waitingPeriodDays }) {
+  const safeMembers = Array.isArray(members) ? members : [];
+  const selectedProducts = trollProducts.filter(product => products.includes(product.code));
+  if (!selectedProducts.some(product => product.code === 'TROLL')) selectedProducts.unshift(trollProducts[0]);
+  const plan = trollPlan(planCode);
+  const contributionPct = Math.max(0, Math.min(100, Number(guildContributionPct ?? 60)));
+  const eligibleMembers = safeMembers.filter(member => trollEligibility(member.eligibilityClass).eligible);
+  const groupClass = trollGroupClass(eligibleMembers.length || safeMembers.length || 1);
+  const locationMultiplier = location === 'LOWER_LANDS' ? 1.05 : 1;
+  const groupMultiplier = groupClass === 'LARGE' ? 0.90 : 1;
+
+  const memberLines = safeMembers.map((member, index) => {
+    const dependents = Math.max(0, Number(member.dependents || 0));
+    const tier = trollTier(dependents);
+    const liverUse = Boolean(member.orcLiverUse);
+    const eligibility = trollEligibility(member.eligibilityClass);
+    const election = member.election === 'WAIVE' ? 'WAIVE' : 'ENROLL';
+    const covered = eligibility.eligible && election === 'ENROLL';
+
+    const coverage = covered ? selectedProducts.map(product => {
+      const base = Number(product.rates[tier] || 0);
+      const planMultiplier = product.code === 'TROLL' ? plan.rateMultiplier : 1;
+      const underwritingMultiplier = product.code === 'TROLL' && liverUse ? 1.08 : 1;
+      const adjusted = trollRound(base * planMultiplier * locationMultiplier * groupMultiplier * underwritingMultiplier);
+      return {
+        code: product.code,
+        name: product.name,
+        deductible: product.code === 'TROLL' ? plan.deductible : product.deductible,
+        baseRate: base,
+        adjustedRate: adjusted
+      };
+    }) : [];
+
+    const grossPremium = trollRound(coverage.reduce((sum, item) => sum + item.adjustedRate, 0));
+    const guildContribution = trollRound(grossPremium * contributionPct / 100);
+    const adventurerContribution = trollRound(grossPremium - guildContribution);
+
+    return {
+      memberId: member.id || `M-${index + 1}`,
+      name: member.name || `Adventurer ${index + 1}`,
+      dependents,
+      tier,
+      eligibilityClass: eligibility.code,
+      eligibilityName: eligibility.name,
+      eligible: eligibility.eligible,
+      election: eligibility.eligible ? election : 'INELIGIBLE',
+      orcLiverUse: liverUse,
+      coverage,
+      grossPremium,
+      guildContribution,
+      adventurerContribution
+    };
+  });
+
+  const grossPremium = trollRound(memberLines.reduce((sum, member) => sum + member.grossPremium, 0));
+  const guildContribution = trollRound(memberLines.reduce((sum, member) => sum + member.guildContribution, 0));
+  const adventurerContribution = trollRound(memberLines.reduce((sum, member) => sum + member.adventurerContribution, 0));
+
+  return {
+    groupName,
+    location,
+    groupClass,
+    memberCount: safeMembers.length,
+    eligibleMemberCount: eligibleMembers.length,
+    dependentCount: safeMembers.reduce((sum, member) => sum + Math.max(0, Number(member.dependents || 0)), 0),
+    locationAdjustmentPct: location === 'LOWER_LANDS' ? 5 : 0,
+    largeGroupDiscountPct: groupClass === 'LARGE' ? 10 : 0,
+    orcLiverUseAdjustmentPct: 8,
+    guildContributionPct: contributionPct,
+    waitingPeriodDays: Math.max(0, Number(waitingPeriodDays || 0)),
+    effectiveDate: trollEffectiveDate(waitingPeriodDays),
+    plan,
+    products: selectedProducts,
+    memberLines,
+    grossPremium,
+    guildContribution,
+    adventurerContribution,
+    monthlyPremium: grossPremium
+  };
+}
+
+// Domain REST APIs -----------------------------------------------------------
+app.get('/api/troll/products', (req, res) => res.json({ products: trollProducts, plans: trollPlans, eligibilityClasses: trollEligibilityClasses }));
+app.get('/api/troll/rates', (req, res) => res.json({
+  products: trollProducts,
+  plans: trollPlans,
+  eligibilityClasses: trollEligibilityClasses,
+  rules: {
+    currency: { goldToSilver: 10, display: 'gold and silver pieces' },
+    groupSize: { small: '1-10', large: '11+', largeDiscountPct: 10 },
+    locations: { UPPER_LANDS: 0, LOWER_LANDS: 5 },
+    underwriting: { orcLiverUsePct: 8, appliesTo: 'TROLL' },
+    contribution: { defaultGuildPct: 60 },
+    waitingPeriods: [0, 30, 60],
+    quoteExpirationDays: 30
+  }
+}));
+
+app.get('/api/troll/groups', (req, res) => res.json(trollGroups));
+app.post('/api/troll/groups', (req, res) => {
+  const group = {
+    id: `G-${++trollGroupSeq}`,
+    name: req.body?.name || `Untitled Party ${trollGroupSeq}`,
+    location: req.body?.location === 'LOWER_LANDS' ? 'LOWER_LANDS' : 'UPPER_LANDS',
+    members: Array.isArray(req.body?.members) ? req.body.members : [],
+    status: 'PROSPECT'
+  };
+  trollGroups.push(group);
+  res.status(201).json(group);
+});
+app.get('/api/troll/groups/:id', (req, res) => {
+  const group = trollGroups.find(item => item.id === req.params.id);
+  group ? res.json(group) : res.status(404).json({ error: 'Party not found' });
+});
+
+app.post('/api/troll/rating/calculate', (req, res) => {
+  try {
+    res.json(trollRateQuote({
+      groupName: req.body?.groupName || 'Unnamed Party',
+      location: req.body?.location === 'LOWER_LANDS' ? 'LOWER_LANDS' : 'UPPER_LANDS',
+      members: req.body?.members || [],
+      products: Array.isArray(req.body?.products) ? req.body.products : ['TROLL'],
+      planCode: req.body?.planCode || 'IRON',
+      guildContributionPct: req.body?.guildContributionPct,
+      waitingPeriodDays: req.body?.waitingPeriodDays
+    }));
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/troll/quotes', (req, res) => res.json(trollQuotes));
+app.post('/api/troll/quotes', (req, res) => {
+  const createdAt = new Date();
+  const expiresAt = new Date(createdAt); expiresAt.setDate(expiresAt.getDate() + 30);
+  const quote = {
+    id: `Q-${++trollQuoteSeq}`,
+    createdAt: createdAt.toISOString(),
+    expiresAt: expiresAt.toISOString().slice(0, 10),
+    status: 'RATED',
+    ...req.body
+  };
+  trollQuotes.push(quote);
+  res.status(201).json(quote);
+});
+app.get('/api/troll/quotes/:id', (req, res) => {
+  const quote = trollQuotes.find(item => item.id === req.params.id);
+  quote ? res.json(quote) : res.status(404).json({ error: 'Quote not found' });
+});
+
+app.get('/api/troll/enrollments', (req, res) => res.json(trollEnrollments));
+app.post('/api/troll/enrollments', (req, res) => {
+  const quote = trollQuotes.find(item => item.id === req.body?.quoteId);
+  if (!quote) return res.status(404).json({ error: 'Quote not found' });
+  let group = trollGroups.find(item => item.id === quote.groupId);
+  if (!group) return res.status(404).json({ error: 'Party not found' });
+  group.status = 'ACTIVE';
+  quote.status = 'ACCEPTED';
+  const enrollment = {
+    id: `E-${++trollEnrollmentSeq}`,
+    quoteId: quote.id,
+    groupId: group.id,
+    status: 'ACTIVE',
+    effectiveDate: quote.effectiveDate,
+    grossPremium: quote.grossPremium,
+    guildContribution: quote.guildContribution,
+    adventurerContribution: quote.adventurerContribution,
+    plan: quote.plan,
+    products: quote.products,
+    memberLines: quote.memberLines.map(line => ({ ...line, enrollmentStatus: line.election === 'ENROLL' ? 'ACTIVE' : line.election }))
+  };
+  trollEnrollments.push(enrollment);
+  res.status(201).json(enrollment);
+});
+app.get('/api/troll/enrollments/:id', (req, res) => {
+  const enrollment = trollEnrollments.find(item => item.id === req.params.id);
+  enrollment ? res.json(enrollment) : res.status(404).json({ error: 'Enrollment not found' });
+});
+
+function trollClaimSharePct(enrollment, productCode) {
+  if (productCode === 'TROLL') return Number(enrollment.plan?.battleCostSharePct || 20);
+  if (productCode === 'GOBLIN') return 20;
+  if (productCode === 'DRAGON') return 10;
+  return 20;
+}
+
+function trollCreateClaim(input) {
+  const enrollment = trollEnrollments.find(item => item.id === input.enrollmentId);
+  if (!enrollment) throw new Error('Enrollment not found');
+  const member = enrollment.memberLines.find(item => item.memberId === input.memberId);
+  if (!member || member.enrollmentStatus !== 'ACTIVE') throw new Error('Adventurer does not have active coverage');
+  const coverage = member.coverage.find(item => item.code === input.productCode);
+  if (!coverage) throw new Error('Selected protection is not active for this adventurer');
+
+  const submittedCharge = Math.max(0, Number(input.submittedCharge || 0));
+  const allowedCharge = trollRound(submittedCharge * 0.85);
+  const deductibleApplied = trollRound(Math.min(Number(coverage.deductible || 0), allowedCharge));
+  const postDeductible = trollRound(Math.max(0, allowedCharge - deductibleApplied));
+  const battleCostSharePct = trollClaimSharePct(enrollment, input.productCode);
+  const battleCostShare = trollRound(postDeductible * battleCostSharePct / 100);
+  const adventurerOwes = trollRound(deductibleApplied + battleCostShare);
+  const trollSurePays = trollRound(Math.max(0, allowedCharge - adventurerOwes));
+
+  return {
+    id: `C-${++trollClaimSeq}`,
+    enrollmentId: enrollment.id,
+    groupId: enrollment.groupId,
+    memberId: member.memberId,
+    memberName: member.name,
+    productCode: coverage.code,
+    productName: coverage.name,
+    incidentType: String(input.incidentType || 'Quest mishap'),
+    healerName: String(input.healerName || 'Moonwell Healing Hall'),
+    incidentDate: String(input.incidentDate || new Date().toISOString().slice(0, 10)),
+    submittedAt: new Date().toISOString(),
+    status: 'APPROVED',
+    submittedCharge: trollRound(submittedCharge),
+    allowedCharge,
+    deductibleApplied,
+    battleCostSharePct,
+    battleCostShare,
+    trollSurePays,
+    adventurerOwes
+  };
+}
+
+function trollDocEscape(value) {
+  return String(value ?? '').replace(/[&<>\"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;' }[c]));
+}
+function trollDocCoins(value) {
+  const tenths = Math.round(Number(value || 0) * 10);
+  const gp = Math.floor(tenths / 10); const sp = tenths % 10;
+  return sp ? `${gp} gp ${sp} sp` : `${gp} gp`;
+}
+function trollScrollHtml({ title, subtitle, badge, sections }) {
+  const sectionHtml = sections.map(section => `<section class="sheet-section"><h2>${trollDocEscape(section.title)}</h2>${section.html}</section>`).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${trollDocEscape(title)}</title><style>
+    :root{--ink:#242019;--muted:#6d6252;--line:#9f8f77;--paper:#fbf7ec;--panel:#fffdf7;--accent:#5f3e2c}
+    *{box-sizing:border-box}body{margin:0;background:#e9e1d2;color:var(--ink);font-family:Georgia,'Times New Roman',serif}.toolbar{position:sticky;top:0;background:#242019;color:white;padding:10px 16px;text-align:center}.toolbar button{border:0;border-radius:8px;padding:9px 14px;font-weight:700;cursor:pointer}.sheet{width:min(920px,calc(100% - 32px));margin:28px auto;background:var(--paper);border:2px solid var(--ink);padding:26px;box-shadow:0 18px 50px rgba(0,0,0,.18)}.crest{display:grid;grid-template-columns:1fr auto;gap:18px;border-bottom:3px double var(--ink);padding-bottom:18px}.eyebrow{font:700 12px/1.2 Arial,sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}h1{font-size:34px;margin:5px 0 4px}.subtitle{color:var(--muted)}.badge{border:2px solid var(--ink);padding:12px 16px;align-self:center;text-align:center;font:800 13px/1.2 Arial,sans-serif;letter-spacing:.12em}.sheet-section{margin-top:20px}.sheet-section h2{font-size:15px;text-transform:uppercase;letter-spacing:.12em;border-bottom:1px solid var(--line);padding-bottom:6px}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{border:1px solid var(--line);background:var(--panel);padding:10px;min-height:68px}.stat span{display:block;font:700 10px/1.2 Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}.stat strong{display:block;margin-top:6px;font-size:16px}.rows{border:1px solid var(--line);background:var(--panel)}.row{display:grid;grid-template-columns:1.3fr 1fr 1fr 1fr;gap:10px;padding:9px 10px;border-top:1px solid #d8cfbf}.row:first-child{border-top:0}.row.header{font:700 10px/1.2 Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}.note{border:1px dashed var(--line);padding:11px;background:#f8f1e4;color:var(--muted)}footer{margin-top:26px;padding-top:12px;border-top:3px double var(--ink);font-size:12px;color:var(--muted)}
+    @media(max-width:700px){.stat-grid{grid-template-columns:1fr 1fr}.row{grid-template-columns:1fr 1fr}.crest{grid-template-columns:1fr}}@media print{body{background:white}.toolbar{display:none}.sheet{width:100%;margin:0;box-shadow:none;border:0;padding:18px}}
+  </style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><main class="sheet"><header class="crest"><div><div class="eyebrow">TrollSure · Official Guild Scroll</div><h1>${trollDocEscape(title)}</h1><div class="subtitle">${trollDocEscape(subtitle)}</div></div><div class="badge">${trollDocEscape(badge)}</div></header>${sectionHtml}<footer>Entirely fictional fantasy benefits document. No actual insurance coverage exists. Generated by Lowry Lab TrollSure.</footer></main></body></html>`;
+}
+
+
+app.get('/api/troll/claims', (req, res) => res.json(trollClaims));
+app.post('/api/troll/claims', (req, res) => {
+  try {
+    const claim = trollCreateClaim(req.body || {});
+    trollClaims.push(claim);
+    res.status(201).json(claim);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+app.get('/api/troll/claims/:id', (req, res) => {
+  const claim = trollClaims.find(item => item.id === req.params.id);
+  claim ? res.json(claim) : res.status(404).json({ error: 'Claim not found' });
+});
+
+app.get('/api/troll/documents/enrollment/:id', (req, res) => {
+  const enrollment = trollEnrollments.find(item => item.id === req.params.id);
+  if (!enrollment) return res.status(404).send('Enrollment not found');
+  const group = trollGroups.find(item => item.id === enrollment.groupId);
+  const members = enrollment.memberLines.filter(item => item.enrollmentStatus === 'ACTIVE');
+  const coverageRows = members.map(member => `<div class="row"><strong>${trollDocEscape(member.name)}</strong><span>${trollDocEscape(member.eligibilityName)}</span><span>${trollDocEscape(member.coverage.map(c => c.name).join(', '))}</span><span>${trollDocCoins(member.grossPremium)}/mo</span></div>`).join('');
+  const html = trollScrollHtml({
+    title: 'Guild Coverage Certificate', subtitle: `${group?.name || enrollment.groupId} · Enrollment ${enrollment.id}`, badge: 'ACTIVE COVERAGE',
+    sections: [
+      { title: 'Party Profile', html: `<div class="stat-grid"><div class="stat"><span>Guild</span><strong>${trollDocEscape(group?.name || enrollment.groupId)}</strong></div><div class="stat"><span>Enrollment</span><strong>${enrollment.id}</strong></div><div class="stat"><span>Effective Date</span><strong>${enrollment.effectiveDate}</strong></div><div class="stat"><span>Plan</span><strong>${trollDocEscape(enrollment.plan?.name || 'Unknown')}</strong></div></div>` },
+      { title: 'Shield Statistics', html: `<div class="stat-grid"><div class="stat"><span>Deductible</span><strong>${trollDocCoins(enrollment.plan?.deductible)}</strong></div><div class="stat"><span>Battle Cost Share</span><strong>${enrollment.plan?.battleCostSharePct || 0}%</strong></div><div class="stat"><span>Max Quest Burden</span><strong>${trollDocCoins(enrollment.plan?.maxQuestBurden)}</strong></div><div class="stat"><span>Guild Premium</span><strong>${trollDocCoins(enrollment.grossPremium)}/mo</strong></div></div>` },
+      { title: 'Covered Adventurers', html: `<div class="rows"><div class="row header"><span>Adventurer</span><span>Class</span><span>Protections</span><span>Monthly Rate</span></div>${coverageRows}</div>` },
+      { title: 'Important Rune', html: `<div class="note">This fantasy certificate summarizes current TrollSure demo enrollment. It is intentionally styled like a character sheet, but the values come from the same enrollment record used by the application.</div>` }
+    ]
+  });
+  res.type('html').send(html);
+});
+
+app.get('/api/troll/documents/claim/:id', (req, res) => {
+  const claim = trollClaims.find(item => item.id === req.params.id);
+  if (!claim) return res.status(404).send('Claim not found');
+  const html = trollScrollHtml({
+    title: 'Claim Determination Scroll', subtitle: `${claim.memberName} · Claim ${claim.id}`, badge: claim.status,
+    sections: [
+      { title: 'Encounter Record', html: `<div class="stat-grid"><div class="stat"><span>Adventurer</span><strong>${trollDocEscape(claim.memberName)}</strong></div><div class="stat"><span>Protection</span><strong>${trollDocEscape(claim.productName)}</strong></div><div class="stat"><span>Incident</span><strong>${trollDocEscape(claim.incidentType)}</strong></div><div class="stat"><span>Healer / Vendor</span><strong>${trollDocEscape(claim.healerName)}</strong></div></div>` },
+      { title: 'Adjudication', html: `<div class="stat-grid"><div class="stat"><span>Submitted Charge</span><strong>${trollDocCoins(claim.submittedCharge)}</strong></div><div class="stat"><span>Guild-Allowed Charge</span><strong>${trollDocCoins(claim.allowedCharge)}</strong></div><div class="stat"><span>Deductible Applied</span><strong>${trollDocCoins(claim.deductibleApplied)}</strong></div><div class="stat"><span>Battle Cost Share</span><strong>${claim.battleCostSharePct}% · ${trollDocCoins(claim.battleCostShare)}</strong></div></div>` },
+      { title: 'Final Responsibility', html: `<div class="stat-grid"><div class="stat"><span>TrollSure Pays</span><strong>${trollDocCoins(claim.trollSurePays)}</strong></div><div class="stat"><span>Adventurer Owes</span><strong>${trollDocCoins(claim.adventurerOwes)}</strong></div><div class="stat"><span>Incident Date</span><strong>${claim.incidentDate}</strong></div><div class="stat"><span>Status</span><strong>${claim.status}</strong></div></div>` },
+      { title: 'Adjudicator Note', html: `<div class="note">For demo simplicity, the guild-allowed charge is 85% of the submitted charge and this claim applies the full deductible before Battle Cost Share. Accumulator logic can be added in a later version.</div>` }
+    ]
+  });
+  res.type('html').send(html);
+});
+
+
+async function trollInternalGet(path, trace, caller) {
+  trace.push(`${caller} → REST GET ${path}`);
+  const response = await fetch(`http://127.0.0.1:${PORT}${path}`);
+  if (!response.ok) throw new Error(`REST GET failed: ${path}`);
+  return response.json();
+}
+async function trollInternalPost(path, body, trace, caller) {
+  trace.push(`${caller} → REST POST ${path}`);
+  const response = await fetch(`http://127.0.0.1:${PORT}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  if (!response.ok) throw new Error(`REST POST failed: ${path}`);
+  return response.json();
+}
+
+// REST BFF ------------------------------------------------------------------
+app.post('/api/troll/bff/quote', async (req, res) => {
+  try {
+    const trace = ['UI → REST BFF: POST /api/troll/bff/quote'];
+    const group = await trollInternalPost('/api/troll/groups', { name: req.body?.groupName, location: req.body?.location, members: req.body?.members }, trace, 'REST BFF');
+    const rating = await trollInternalPost('/api/troll/rating/calculate', { ...req.body, groupName: group.name, location: group.location, members: group.members }, trace, 'REST BFF');
+    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id }, trace, 'REST BFF');
+    trace.push('REST BFF composed group + rating + quote → UI');
+    res.status(201).json({ quote, trace, backendCallCount: 3 });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+app.post('/api/troll/bff/enroll', async (req, res) => {
+  try {
+    const trace = ['UI → REST BFF: POST /api/troll/bff/enroll'];
+    const enrollment = await trollInternalPost('/api/troll/enrollments', { quoteId: req.body?.quoteId }, trace, 'REST BFF');
+    const group = await trollInternalGet(`/api/troll/groups/${enrollment.groupId}`, trace, 'REST BFF');
+    trace.push('REST BFF composed enrollment + group → UI');
+    res.status(201).json({ enrollment, group, trace, backendCallCount: 2 });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+app.post('/api/troll/bff/claims', async (req, res) => {
+  try {
+    const trace = ['UI → REST BFF: POST /api/troll/bff/claims'];
+    const enrollment = await trollInternalGet(`/api/troll/enrollments/${req.body?.enrollmentId}`, trace, 'REST BFF');
+    const claim = await trollInternalPost('/api/troll/claims', req.body || {}, trace, 'REST BFF');
+    trace.push('REST BFF composed enrollment validation + claim adjudication → UI');
+    res.status(201).json({ claim, enrollment, trace, backendCallCount: 2 });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
+app.get('/api/troll/bff/groups/:id', async (req, res) => {
+  try {
+    const trace = [`UI → REST BFF: GET /api/troll/bff/groups/${req.params.id}`];
+    const group = await trollInternalGet(`/api/troll/groups/${req.params.id}`, trace, 'REST BFF');
+    const quotes = await trollInternalGet('/api/troll/quotes', trace, 'REST BFF');
+    const enrollments = await trollInternalGet('/api/troll/enrollments', trace, 'REST BFF');
+    const quote = [...quotes].reverse().find(item => item.groupId === group.id) || null;
+    const enrollment = [...enrollments].reverse().find(item => item.groupId === group.id) || null;
+    trace.push('REST BFF composed group + quote + enrollment → UI');
+    res.json({ group, quote, enrollment, trace, backendCallCount: 3 });
+  } catch (error) { res.status(404).json({ error: error.message }); }
+});
+
+// GraphQL facade -------------------------------------------------------------
+const trollSchema = buildSchema(`
+  enum TrollLocation { UPPER_LANDS LOWER_LANDS }
+  enum TrollProductCode { TROLL GOBLIN DRAGON }
+  enum TrollPlanCode { WOOD IRON MITHRIL }
+  enum EligibilityClass { GUILDMASTER FULL_TIME APPRENTICE SEASONAL }
+  enum CoverageElection { ENROLL WAIVE }
+  type ProductRate { code: String!, name: String!, deductible: Float, baseRate: Float!, adjustedRate: Float! }
+  type TrollPlan { code: String!, name: String!, rateMultiplier: Float!, deductible: Float!, battleCostSharePct: Float!, maxQuestBurden: Float! }
+  type TrollProduct { code: String!, name: String!, kind: String!, deductible: Float }
+  type MemberQuote { memberId: String!, name: String!, dependents: Int!, tier: String!, eligibilityClass: String!, eligibilityName: String!, eligible: Boolean!, election: String!, orcLiverUse: Boolean!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, coverage: [ProductRate!]! }
+  type Quote { id: ID!, groupId: ID!, groupName: String!, location: String!, groupClass: String!, memberCount: Int!, eligibleMemberCount: Int!, dependentCount: Int!, locationAdjustmentPct: Float!, largeGroupDiscountPct: Float!, orcLiverUseAdjustmentPct: Float!, guildContributionPct: Float!, waitingPeriodDays: Int!, effectiveDate: String!, expiresAt: String!, status: String!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, monthlyPremium: Float!, plan: TrollPlan!, products: [TrollProduct!]!, memberLines: [MemberQuote!]! }
+  type Enrollment { id: ID!, quoteId: ID!, groupId: ID!, status: String!, effectiveDate: String!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, plan: TrollPlan, products: [TrollProduct!], memberLines: [MemberQuote!] }
+  type Claim { id: ID!, enrollmentId: ID!, groupId: ID!, memberId: ID!, memberName: String!, productCode: String!, productName: String!, incidentType: String!, healerName: String!, incidentDate: String!, status: String!, submittedCharge: Float!, allowedCharge: Float!, deductibleApplied: Float!, battleCostSharePct: Float!, battleCostShare: Float!, trollSurePays: Float!, adventurerOwes: Float! }
+  type ClaimPayload { claim: Claim!, enrollment: Enrollment!, trace: [String!]!, backendCallCount: Int! }
+  type Group { id: ID!, name: String!, location: String!, status: String! }
+  type QuotePayload { quote: Quote!, trace: [String!]!, backendCallCount: Int! }
+  type EnrollmentPayload { enrollment: Enrollment!, group: Group!, trace: [String!]!, backendCallCount: Int! }
+  type GroupPayload { group: Group!, quote: Quote, enrollment: Enrollment, trace: [String!]!, backendCallCount: Int! }
+  input MemberInput { id: ID, name: String!, dependents: Int!, eligibilityClass: EligibilityClass!, election: CoverageElection!, orcLiverUse: Boolean! }
+  input QuoteInput { groupName: String!, location: TrollLocation!, members: [MemberInput!]!, products: [TrollProductCode!]!, planCode: TrollPlanCode!, guildContributionPct: Float!, waitingPeriodDays: Int! }
+  input ClaimInput { enrollmentId: ID!, memberId: ID!, productCode: TrollProductCode!, incidentType: String!, healerName: String!, incidentDate: String!, submittedCharge: Float! }
+  type Query { trollGroup(id: ID!): GroupPayload! }
+  type Mutation { createTrollQuote(input: QuoteInput!): QuotePayload!, enrollTrollQuote(quoteId: ID!): EnrollmentPayload!, submitTrollClaim(input: ClaimInput!): ClaimPayload! }
+`);
+
+const trollRoot = {
+  createTrollQuote: async ({ input }) => {
+    const trace = ['UI → GraphQL: mutation createTrollQuote'];
+    const group = await trollInternalPost('/api/troll/groups', { name: input.groupName, location: input.location, members: input.members }, trace, 'GraphQL');
+    const rating = await trollInternalPost('/api/troll/rating/calculate', { ...input, groupName: group.name, location: group.location, members: group.members }, trace, 'GraphQL');
+    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id }, trace, 'GraphQL');
+    trace.push('GraphQL resolver composed group + rating + quote → UI');
+    return { quote, trace, backendCallCount: 3 };
+  },
+  enrollTrollQuote: async ({ quoteId }) => {
+    const trace = ['UI → GraphQL: mutation enrollTrollQuote'];
+    const enrollment = await trollInternalPost('/api/troll/enrollments', { quoteId }, trace, 'GraphQL');
+    const group = await trollInternalGet(`/api/troll/groups/${enrollment.groupId}`, trace, 'GraphQL');
+    trace.push('GraphQL resolver composed enrollment + group → UI');
+    return { enrollment, group, trace, backendCallCount: 2 };
+  },
+  submitTrollClaim: async ({ input }) => {
+    const trace = ['UI → GraphQL: mutation submitTrollClaim'];
+    const enrollment = await trollInternalGet(`/api/troll/enrollments/${input.enrollmentId}`, trace, 'GraphQL');
+    const claim = await trollInternalPost('/api/troll/claims', input, trace, 'GraphQL');
+    trace.push('GraphQL resolver composed enrollment validation + claim adjudication → UI');
+    return { claim, enrollment, trace, backendCallCount: 2 };
+  },
+  trollGroup: async ({ id }) => {
+    const trace = ['UI → GraphQL: query trollGroup'];
+    const group = await trollInternalGet(`/api/troll/groups/${id}`, trace, 'GraphQL');
+    const quotes = await trollInternalGet('/api/troll/quotes', trace, 'GraphQL');
+    const enrollments = await trollInternalGet('/api/troll/enrollments', trace, 'GraphQL');
+    const quote = [...quotes].reverse().find(item => item.groupId === id) || null;
+    const enrollment = [...enrollments].reverse().find(item => item.groupId === id) || null;
+    trace.push('GraphQL resolver composed group + quote + enrollment → UI');
+    return { group, quote, enrollment, trace, backendCallCount: 3 };
+  }
+};
+app.all('/troll-graphql', createHandler({ schema: trollSchema, rootValue: trollRoot }));
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Lowry site + Lab running on port ${PORT}`));
