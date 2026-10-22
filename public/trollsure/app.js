@@ -1,4 +1,4 @@
-const state = { mode: 'bff', latestQuote: null, latestEnrollment: null, latestGroupId: null, claimEnrollment: null, latestClaim: null, activeAgentId: 'A-101' };
+const state = { mode: 'bff', latestQuote: null, latestEnrollment: null, latestGroupId: null, claimEnrollment: null, latestClaim: null, activeAgentId: 'A-101', opsCatalog: null };
 const $ = id => document.getElementById(id);
 const archSummary = {
   bff: 'The UI sends one purpose-built REST request. The BFF orchestrates the domain APIs.',
@@ -17,6 +17,7 @@ function showView(view) {
   if (view === 'rates') loadRates();
   if (view === 'claims') renderClaimForm();
   if (view === 'agents') loadAgentPortal();
+  if (view === 'operations') loadOperations();
 }
 
 $('memberCount').addEventListener('change', renderMembers);
@@ -34,6 +35,8 @@ $('refreshGroups').addEventListener('click', loadGroups);
 $('claimMember').addEventListener('change', syncClaimProducts);
 $('claimBtn').addEventListener('click', submitClaim);
 $('agentSelect').addEventListener('change', e => { state.activeAgentId=e.target.value; loadAgentPortal(); });
+$('opsType').addEventListener('change', syncOperationChoices);
+$('opsRun').addEventListener('click', runBenefitOperation);
 
 function renderMembers(seed = null) {
   const count = Math.max(1, Math.min(30, Number($('memberCount').value || 1)));
@@ -162,7 +165,7 @@ async function loadGroupDetail(id){
     else{const query=`query Group($id: ID!) { trollGroup(id: $id) { group { id name location status agentId } quote { id status grossPremium guildContribution adventurerContribution groupClass memberCount eligibleMemberCount dependentCount effectiveDate plan { name } products { name code kind deductible } memberLines { memberId name eligibilityName election grossPremium } } enrollment { id quoteId groupId status effectiveDate grossPremium guildContribution adventurerContribution plan { code name deductible battleCostSharePct maxQuestBurden } products { code name kind deductible } memberLines { memberId name eligibilityName election coverage { code name deductible baseRate adjustedRate } grossPremium } } trace backendCallCount } }`; consumer=`${query}\n\nvariables:\n${JSON.stringify({id},null,2)}`; const result=await fetchJson('/troll-graphql',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,variables:{id}})}); if(result.errors)throw new Error(result.errors[0].message); payload=result.data.trollGroup;}
     const {group,quote,enrollment}=payload;
     if (enrollment && enrollment.memberLines) enrollment.memberLines = enrollment.memberLines.map(m => ({...m, enrollmentStatus: m.enrollmentStatus || (m.election === 'ENROLL' ? 'ACTIVE' : m.election)}));
-    if (enrollment) state.claimEnrollment=enrollment;
+    if (enrollment) { state.claimEnrollment=enrollment; state.latestEnrollment=enrollment; }
     $('groupDetail').innerHTML=`<div class="panel account-card"><div class="panel-heading"><div><span class="step">${group.id}</span><h2>${escapeHtml(group.name)}</h2></div><span class="status">${group.status}</span></div>${quote?`<div class="metric-grid"><div class="metric"><span>Plan</span><strong>${quote.plan.name}</strong></div><div class="metric"><span>Latest quote</span><strong>${quote.id} · ${quote.status}</strong></div><div class="metric"><span>Gross premium</span><strong>${coins(quote.grossPremium)}/mo</strong></div><div class="metric"><span>Effective</span><strong>${quote.effectiveDate}</strong></div><div class="metric"><span>Agent</span><strong>${group.agentId || 'A-101'}</strong></div></div><h3>Adventurers</h3>${quote.memberLines.map(m=>`<div class="election-row"><strong>${escapeHtml(m.name)}</strong><span>${m.eligibilityName}</span><span>${m.election}</span><span>${coins(m.grossPremium)}</span>${enrollment && (m.election==='ENROLL')?`<a class="mini-link" target="_blank" href="/api/troll/documents/member-card/${enrollment.id}/${m.memberId}">ID Card</a>`:''}</div>`).join('')}`:'<p class="muted">No quote yet.</p>'}${enrollment?`<div class="success"><strong>${enrollment.id} · ${enrollment.status}</strong><br>Coverage effective ${enrollment.effectiveDate}<div class="action-row"><a class="doc-link" target="_blank" href="/api/troll/documents/enrollment/${enrollment.id}">Open Guild Coverage Scroll</a><button class="ghost" id="fileGroupClaim">File a Claim</button></div></div>`:''}</div>`;
     if(enrollment) $('fileGroupClaim').onclick=()=>{ state.claimEnrollment=enrollment; renderClaimForm(); showView('claims'); };
     renderTrace(consumer,payload.trace,payload.backendCallCount);
@@ -178,6 +181,7 @@ function renderClaimForm(){
   $('claimMember').innerHTML=active.map(m=>`<option value="${m.memberId}">${escapeHtml(m.name)}</option>`).join('');
   $('claimDate').value=new Date().toISOString().slice(0,10);
   syncClaimProducts();
+  ensureOperationsCatalog().catch(()=>{});
 }
 function syncClaimProducts(){
   const enrollment=state.claimEnrollment || state.latestEnrollment; if(!enrollment)return;
@@ -186,7 +190,8 @@ function syncClaimProducts(){
 }
 async function submitClaim(){
   const enrollment=state.claimEnrollment || state.latestEnrollment; if(!enrollment)return;
-  const input={enrollmentId:enrollment.id,memberId:$('claimMember').value,productCode:$('claimProduct').value,incidentType:$('claimIncident').value,healerName:$('claimHealer').value.trim()||'Moonwell Healing Hall',incidentDate:$('claimDate').value,submittedCharge:Number($('claimCharge').value||0)};
+  const providerOption=$('claimProvider').selectedOptions[0];
+  const input={enrollmentId:enrollment.id,memberId:$('claimMember').value,productCode:$('claimProduct').value,incidentType:$('claimIncident').value,healerName:providerOption?.textContent?.split(' · ')[0]||'Moonwell Healing Hall',incidentDate:$('claimDate').value,submittedCharge:Number($('claimCharge').value||0)};
   $('claimBtn').disabled=true; $('claimBtn').textContent='Adjudicating…';
   try{
     let payload,consumer;
@@ -194,7 +199,7 @@ async function submitClaim(){
       consumer=`POST /api/troll/bff/claims\n\n${JSON.stringify(input,null,2)}`;
       payload=await fetchJson('/api/troll/bff/claims',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
     }else{
-      const query=`mutation Claim($input: ClaimInput!) { submitTrollClaim(input: $input) { claim { id enrollmentId groupId memberId memberName productCode productName incidentType healerName incidentDate status submittedCharge allowedCharge deductibleApplied battleCostSharePct battleCostShare trollSurePays adventurerOwes } trace backendCallCount } }`;
+      const query=`mutation Claim($input: ClaimInput!) { submitTrollClaim(input: $input) { claim { id enrollmentId groupId memberId memberName productCode productName incidentType healerName providerId providerNetwork incidentDate status submittedCharge allowedCharge deductibleApplied battleCostSharePct battleCostShare trollSurePays adventurerOwes deductibleRemaining outOfPocketYtd maxQuestBurden trollSurePaidYtd } trace backendCallCount } }`;
       consumer=`${query}\n\nvariables:\n${JSON.stringify({input},null,2)}`;
       const result=await fetchJson('/troll-graphql',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,variables:{input}})}); if(result.errors)throw new Error(result.errors[0].message); payload=result.data.submitTrollClaim;
     }
@@ -205,7 +210,7 @@ async function submitClaim(){
 function renderClaimResult(c){
   $('claimResultEmpty').classList.add('hidden'); $('claimResult').classList.remove('hidden');
   $('claimResult').innerHTML=`<div class="quote-hero"><div><div class="status">${c.id} · ${c.status}</div><strong>${escapeHtml(c.memberName)}</strong><div class="muted">${escapeHtml(c.productName)} · ${escapeHtml(c.incidentType)}</div></div><div class="price">${coins(c.trollSurePays)} <small>paid</small></div></div>
-  <div class="claim-ledger"><div><span>Submitted charge</span><strong>${coins(c.submittedCharge)}</strong></div><div><span>Guild-allowed charge</span><strong>${coins(c.allowedCharge)}</strong></div><div><span>Deductible applied</span><strong>${coins(c.deductibleApplied)}</strong></div><div><span>Battle Cost Share</span><strong>${c.battleCostSharePct}% · ${coins(c.battleCostShare)}</strong></div><div class="pay"><span>TrollSure pays</span><strong>${coins(c.trollSurePays)}</strong></div><div class="owe"><span>Adventurer owes</span><strong>${coins(c.adventurerOwes)}</strong></div></div>
+  <div class="claim-ledger"><div><span>Submitted charge</span><strong>${coins(c.submittedCharge)}</strong></div><div><span>Guild-allowed charge</span><strong>${coins(c.allowedCharge)}</strong></div><div><span>Deductible applied</span><strong>${coins(c.deductibleApplied)}</strong></div><div><span>Battle Cost Share</span><strong>${c.battleCostSharePct}% · ${coins(c.battleCostShare)}</strong></div><div class="pay"><span>TrollSure pays</span><strong>${coins(c.trollSurePays)}</strong></div><div class="owe"><span>Adventurer owes</span><strong>${coins(c.adventurerOwes)}</strong></div></div><div class="metric-grid"><div class="metric"><span>Provider network</span><strong>${pretty(c.providerNetwork||'IN_GUILD')}</strong></div><div class="metric"><span>Deductible remaining</span><strong>${coins(c.deductibleRemaining)}</strong></div><div class="metric"><span>Quest burden YTD</span><strong>${coins(c.outOfPocketYtd)}</strong></div><div class="metric"><span>TrollSure paid YTD</span><strong>${coins(c.trollSurePaidYtd)}</strong></div></div>
   <div class="action-row"><a class="doc-link" target="_blank" href="/api/troll/documents/claim/${c.id}">Claim Determination Scroll</a><a class="doc-link" target="_blank" href="/api/troll/documents/eob/${c.id}">Explanation of Battle Benefits</a></div>`;
 }
 
@@ -234,6 +239,81 @@ async function loadAgentPortal() {
   } catch(e) {
     $('agentPortal').className='error'; $('agentPortal').textContent=e.message;
   }
+}
+
+
+async function ensureOperationsCatalog(){
+  if(state.opsCatalog) return state.opsCatalog;
+  let payload,consumer;
+  if(state.mode==='bff'){
+    consumer='GET /api/troll/bff/operations/catalog';
+    payload=await fetchJson('/api/troll/bff/operations/catalog');
+  }else{
+    const query=`query OperationsCatalog { trollOperationsCatalog { providers { id name network specialty allowedPct } formulary { code name tier copay status } trace backendCallCount } }`;
+    consumer=query;
+    const result=await fetchJson('/troll-graphql',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query})});
+    if(result.errors) throw new Error(result.errors[0].message); payload=result.data.trollOperationsCatalog;
+  }
+  state.opsCatalog={providers:payload.providers,formulary:payload.formulary};
+  if($('claimProvider')) $('claimProvider').innerHTML=payload.providers.map(p=>`<option value="${p.id}">${escapeHtml(p.name)} · ${p.network==='IN_GUILD'?'In-Guild':'Out-of-Guild'}</option>`).join('');
+  renderOperationsCatalog();
+  renderTrace(consumer,payload.trace,payload.backendCallCount);
+  return state.opsCatalog;
+}
+
+async function loadOperations(){
+  const enrollment=state.latestEnrollment || state.claimEnrollment;
+  if(!enrollment){ $('opsEmpty').classList.remove('hidden'); $('opsForm').classList.add('hidden'); $('opsResult').classList.add('hidden'); await ensureOperationsCatalog().catch(()=>{}); return; }
+  $('opsEmpty').classList.add('hidden'); $('opsForm').classList.remove('hidden');
+  $('opsContext').innerHTML=`<div class="metric-grid"><div class="metric"><span>Enrollment</span><strong>${enrollment.id}</strong></div><div class="metric"><span>Plan</span><strong>${escapeHtml(enrollment.plan?.name||'Unknown')}</strong></div><div class="metric"><span>Effective</span><strong>${enrollment.effectiveDate}</strong></div><div class="metric"><span>Status</span><strong>${enrollment.status}</strong></div></div>`;
+  const active=(enrollment.memberLines||[]).filter(m=>(m.enrollmentStatus || (m.election==='ENROLL'?'ACTIVE':m.election))==='ACTIVE');
+  $('opsMember').innerHTML=active.map(m=>`<option value="${m.memberId}">${escapeHtml(m.name)}</option>`).join('');
+  await ensureOperationsCatalog(); syncOperationChoices();
+}
+function renderOperationsCatalog(){
+  if(!state.opsCatalog || !$('opsCatalog')) return;
+  const providers=state.opsCatalog.providers.map(p=>`<div class="ops-ref-row"><div><strong>${escapeHtml(p.name)}</strong><small>${escapeHtml(p.specialty)}</small></div><span class="status ${p.network==='IN_GUILD'?'':'dim'}">${pretty(p.network)}</span><strong>${p.allowedPct}% allowed</strong></div>`).join('');
+  const potions=state.opsCatalog.formulary.map(p=>`<div class="ops-ref-row"><div><strong>${escapeHtml(p.name)}</strong><small>Tier ${p.tier}</small></div><span class="status ${p.status==='NOT_COVERED'?'dim':''}">${pretty(p.status)}</span><strong>${p.copay?coins(p.copay):'—'}</strong></div>`).join('');
+  $('opsCatalog').className=''; $('opsCatalog').innerHTML=`<h3>Participating healers</h3>${providers}<h3>Potion formulary</h3>${potions}`;
+}
+function syncOperationChoices(){
+  const type=$('opsType').value; const c=state.opsCatalog||{formulary:[]};
+  let label='Service / election', options=[];
+  if(type==='PRIOR_AUTH'){ label='Requested service'; options=[['CURSED_LIMB_REGENERATION','Cursed Limb Regeneration'],['GREATER_RESTORATION','Greater Restoration'],['DISCOUNT_RESURRECTION','Discount Resurrection Wagon']]; }
+  else if(type==='POTION_FILL'){ label='Potion'; options=c.formulary.map(p=>[p.code,p.name]); }
+  else if(type==='LIFE_EVENT'){ label='Quest life event'; options=[['NEW_PARTY_MEMBER','New Party Member'],['QUEST_BONDING','Quest Bonding'],['LOSS_OF_RIVAL_COVERAGE','Loss of Rival Guild Protection']]; }
+  else if(type==='OPEN_ENROLLMENT'){ label='Next plan year shield'; options=[['WOOD','Wooden Shield'],['IRON','Iron Shield'],['MITHRIL','Mithril Shield']]; }
+  else if(type==='APPEAL'){ label='Claim to appeal'; options=[[state.latestClaim?.id||'',state.latestClaim?`${state.latestClaim.id} · ${state.latestClaim.incidentType}`:'Most recent claim']]; }
+  else { label='Operation'; options=[['DEFAULT','Use current enrollment']]; }
+  $('opsChoiceLabel').childNodes[0].nodeValue=label; $('opsChoice').innerHTML=options.map(([v,t])=>`<option value="${v}">${escapeHtml(t)}</option>`).join('');
+}
+async function runBenefitOperation(){
+  const enrollment=state.latestEnrollment || state.claimEnrollment; if(!enrollment) return;
+  const type=$('opsType').value; const input={enrollmentId:enrollment.id,memberId:$('opsMember').value,type,notes:$('opsNotes').value};
+  if(type==='PRIOR_AUTH'||type==='POTION_FILL') input.serviceCode=$('opsChoice').value;
+  if(type==='LIFE_EVENT') input.eventType=$('opsChoice').value;
+  if(type==='OPEN_ENROLLMENT') input.planCode=$('opsChoice').value;
+  if(type==='APPEAL') input.claimId=$('opsChoice').value||state.latestClaim?.id;
+  $('opsRun').disabled=true; $('opsRun').textContent='Consulting the scrolls…';
+  try{
+    let payload,consumer;
+    if(state.mode==='bff'){
+      consumer=`POST /api/troll/bff/operations\n\n${JSON.stringify(input,null,2)}`;
+      payload=await fetchJson('/api/troll/bff/operations',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)});
+    }else{
+      const query=`mutation BenefitOperation($input: OperationInput!) { runTrollOperation(input: $input) { operation { id type enrollmentId groupId memberId status message detailsJson createdAt } trace backendCallCount } }`;
+      consumer=`${query}\n\nvariables:\n${JSON.stringify({input},null,2)}`;
+      const result=await fetchJson('/troll-graphql',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({query,variables:{input}})}); if(result.errors) throw new Error(result.errors[0].message); payload=result.data.runTrollOperation;
+      payload.operation.details=JSON.parse(payload.operation.detailsJson||'{}');
+    }
+    renderOperationResult(payload.operation); renderTrace(consumer,payload.trace,payload.backendCallCount);
+  }catch(e){ $('opsResult').classList.remove('hidden'); $('opsResult').innerHTML=`<div class="error">${escapeHtml(e.message)}</div>`; }
+  finally{$('opsRun').disabled=false;$('opsRun').textContent='Run Benefit Operation';}
+}
+function renderOperationResult(op){
+  const d=op.details||{}; $('opsResult').classList.remove('hidden');
+  const rows=Object.entries(d).map(([k,v])=>`<div class="metric"><span>${pretty(k)}</span><strong>${typeof v==='number' && /premium|contribution|copay/i.test(k)?coins(v):escapeHtml(v)}</strong></div>`).join('');
+  $('opsResult').innerHTML=`<div class="quote-hero"><div><div class="status">${op.id} · ${op.status}</div><strong>${pretty(op.type)}</strong></div></div><p>${escapeHtml(op.message)}</p><div class="metric-grid">${rows}</div>`;
 }
 
 async function loadRates(){

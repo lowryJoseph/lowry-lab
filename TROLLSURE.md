@@ -1,21 +1,21 @@
-# TrollSure
+# TrollSure v20 — Benefits Operations
 
-A deliberately fictional fantasy group-benefits demo for Lowry Lab.
+TrollSure is an aggressively fictional group-benefits platform used to demonstrate REST BFF vs GraphQL orchestration over the same domain REST APIs. All currency, products, rules, people, places, providers, and workflows are fantasy/demo data.
 
-## V19 features
-- Quote and enrollment flow
-- Wooden, Iron, and Mithril Shield plans
-- Deductible, Battle Cost Share, and Max Quest Burden
-- Guild/adventurer contribution split
-- Eligibility, waive/enroll elections, waiting periods, and quote lifecycle
-- Fake underwriting factor: Orc Liver Use
-- Claims adjudication
-- Guild Coverage Certificate
-- Claim Determination Scroll
-- Explanation of Battle Benefits (EOB-style, explicitly NOT A BILL)
-- Printable Adventurer Benefit / member ID cards
-- Guild Benefits Agent portal with book of business, active groups, covered adventurers, premium, and fake commission
-- REST BFF / GraphQL toggle over the same domain REST APIs
-- Architecture trace showing consumer request and backend orchestration
+## V20 additions
+- Participating healer/provider network with in-guild vs out-of-guild allowed-charge differences
+- Potion formulary with tiers, copays, prior authorization, and exclusions
+- Royal Pre-Approval (prior authorization)
+- Real per-member deductible and Max Quest Burden accumulators across repeated claims
+- Annual Guild Enrollment plan election
+- Quest Life Events / special enrollment window
+- Renewal offers and rate changes
+- Petition to the High Council (claim appeals)
+- Guild premium statements
+- Continuation Protection parody workflow
+- One Benefit Operations UI backed by domain REST APIs through either REST BFF or GraphQL
 
-All plans, rates, underwriting rules, currency, people, and coverage are fictional and intentionally fantasy-themed.
+## Core architecture
+UI → REST BFF or GraphQL facade → domain REST APIs.
+
+The browser does not calculate premiums or adjudicate claims. Backend services remain the source of truth.
