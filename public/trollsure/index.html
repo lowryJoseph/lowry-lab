@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrollSure · Lowry Lab</title>
+  <link rel="stylesheet" href="/trollsure/styles.css" />
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LOWRY LAB · FANTASY BENEFITS DEMO</p>
+        <h1>TrollSure</h1>
+        <p class="lede">Quote and enroll adventuring parties in aggressively fictional guild benefits using gold and silver pieces.</p>
+      </div>
+      <a class="back-link" href="/">← Lowry Lab</a>
+    </header>
+
+    <section class="architecture-card">
+      <div>
+        <span class="label">Consumer architecture</span>
+        <div class="toggle" role="group" aria-label="Architecture mode">
+          <button class="arch-btn active" data-mode="bff">REST BFF</button>
+          <button class="arch-btn" data-mode="graphql">GraphQL</button>
+        </div>
+      </div>
+      <p id="archSummary">The UI sends one purpose-built REST request. The BFF orchestrates the domain APIs.</p>
+    </section>
+
+    <nav class="tabs" aria-label="TrollSure pages">
+      <button class="tab active" data-view="quote">New Quote</button>
+      <button class="tab" data-view="enroll">Enrollment</button>
+      <button class="tab" data-view="groups">Groups</button>
+      <button class="tab" data-view="claims">Claims</button>
+      <button class="tab" data-view="rates">Plans & Rates</button>
+    </nav>
+
+    <main>
+      <section class="view active" id="view-quote">
+        <div class="two-col">
+          <div class="panel">
+            <div class="panel-heading">
+              <div><span class="step">STEP 1</span><h2>Build a guild quote</h2></div>
+              <button id="sampleBtn" class="ghost">Load sample</button>
+            </div>
+
+            <label>Party / guild name
+              <input id="groupName" value="Fellowship of Questionable Decisions" />
+            </label>
+
+            <div class="field-row three">
+              <label>Location
+                <select id="location">
+                  <option value="UPPER_LANDS">Upper Lands</option>
+                  <option value="LOWER_LANDS">Lower Lands (+5%)</option>
+                </select>
+              </label>
+              <label>Members
+                <input id="memberCount" type="number" min="1" max="30" value="3" />
+              </label>
+              <label>Guild contribution
+                <select id="guildContributionPct">
+                  <option value="50">50%</option>
+                  <option value="60" selected>60%</option>
+                  <option value="75">75%</option>
+                  <option value="100">100%</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-row">
+              <label>Core Troll plan
+                <select id="planCode">
+                  <option value="WOOD">Wooden Shield</option>
+                  <option value="IRON" selected>Iron Shield</option>
+                  <option value="MITHRIL">Mithril Shield</option>
+                </select>
+              </label>
+              <label>Waiting period
+                <select id="waitingPeriodDays">
+                  <option value="0">Next Moon (0 days)</option>
+                  <option value="30">30-day Quest Wait</option>
+                  <option value="60">60-day Quest Wait</option>
+                </select>
+              </label>
+            </div>
+
+            <h3>Coverage</h3>
+            <div class="coverage-grid">
+              <label class="coverage-card"><input type="checkbox" value="TROLL" checked disabled /><span>🧌</span><strong>Troll Insurance</strong><small>Core protection</small></label>
+              <label class="coverage-card"><input type="checkbox" value="GOBLIN" checked /><span>👺</span><strong>Goblin Theft</strong><small>Optional guild add-on</small></label>
+              <label class="coverage-card"><input type="checkbox" value="DRAGON" /><span>🐉</span><strong>Dragon Singe</strong><small>Optional guild add-on</small></label>
+            </div>
+
+            <div class="member-heading">
+              <h3>Adventurers</h3>
+              <small>Seasonal Mercenaries are ineligible. Orc Liver Use adds 8% to core Troll coverage only.</small>
+            </div>
+            <div id="members"></div>
+
+            <button id="quoteBtn" class="primary full">Calculate Quote</button>
+          </div>
+
+          <aside class="panel result-panel">
+            <span class="step">STEP 2</span>
+            <h2>Quote result</h2>
+            <div id="quoteEmpty" class="empty-state">Build the party, choose coverage, then calculate a quote.</div>
+            <div id="quoteResult" class="hidden"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-enroll">
+        <div class="panel narrow">
+          <span class="step">STEP 3</span>
+          <h2>Enroll quoted party</h2>
+          <div id="enrollEmpty" class="empty-state">Create a quote first. Your most recent quote will appear here.</div>
+          <div id="enrollContent" class="hidden"></div>
+        </div>
+      </section>
+
+      <section class="view" id="view-groups">
+        <div class="panel">
+          <div class="panel-heading"><div><span class="step">ACCOUNT VIEW</span><h2>Groups</h2></div><button id="refreshGroups" class="ghost">Refresh</button></div>
+          <div id="groupList" class="empty-state">No parties yet.</div>
+          <div id="groupDetail"></div>
+        </div>
+      </section>
+
+
+      <section class="view" id="view-claims">
+        <div class="two-col">
+          <div class="panel">
+            <span class="step">CLAIMS</span>
+            <h2>Report an unfortunate quest event</h2>
+            <div id="claimEmpty" class="empty-state">Choose an active enrollment from the Groups page, then file a claim for a covered adventurer.</div>
+            <div id="claimForm" class="hidden">
+              <div class="claim-context" id="claimContext"></div>
+              <div class="field-row">
+                <label>Covered adventurer<select id="claimMember"></select></label>
+                <label>Protection<select id="claimProduct"></select></label>
+              </div>
+              <div class="field-row">
+                <label>Incident type<select id="claimIncident"><option>Troll encounter treatment</option><option>Goblin theft recovery</option><option>Dragon singe treatment</option><option>Dungeon mishap</option><option>Cursed object incident</option></select></label>
+                <label>Incident date<input id="claimDate" type="date" /></label>
+              </div>
+              <label>Healer / vendor<input id="claimHealer" value="Moonwell Healing Hall" /></label>
+              <label>Submitted charge (gold pieces)<input id="claimCharge" type="number" min="1" step="0.1" value="1800" /></label>
+              <p class="muted">Demo adjudication uses a guild-allowed charge of 85% of the submitted charge, then applies the selected protection's deductible and Battle Cost Share.</p>
+              <button id="claimBtn" class="primary full">Submit Claim</button>
+            </div>
+          </div>
+          <aside class="panel result-panel">
+            <span class="step">ADJUDICATION</span>
+            <h2>Claim result</h2>
+            <div id="claimResultEmpty" class="empty-state">No claim submitted yet.</div>
+            <div id="claimResult" class="hidden"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-rates">
+        <div class="panel">
+          <span class="step">FAKE ACTUARIAL TABLES</span>
+          <h2>Plans, products & rating rules</h2>
+          <p class="muted">Every number is fictional. Currency is fantasy gold and silver pieces: 1 gp = 10 sp.</p>
+          <div id="rateTable">Loading rates…</div>
+        </div>
+      </section>
+
+      <section class="panel trace-panel">
+        <div class="panel-heading"><div><span class="step">ARCHITECTURE TRACE</span><h2>What the UI actually sent</h2></div><span id="callCount" class="pill">0 backend calls</span></div>
+        <div class="trace-grid">
+          <div><h3>Consumer request</h3><pre id="consumerRequest">No request yet.</pre></div>
+          <div><h3>Backend orchestration</h3><ol id="traceList"><li>No request yet.</li></ol></div>
+        </div>
+      </section>
+    </main>
+  </div>
+<script src="/trollsure/app.js"></script>
+</body>
+</html>
