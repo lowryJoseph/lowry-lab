@@ -1,12 +1,5 @@
-# Lowry Lab v18
+# Lowry Lab v19
 
-Includes TrollSure V1.1 with claims adjudication and printable fantasy benefits documents, plus the existing Lowry Lab demos.
+Adds TrollSure Agent Portal, printable adventurer member ID cards, and Explanation of Battle Benefits documents to the existing TrollSure quote, enrollment, and claims demo.
 
-Run locally:
-
-```bash
-npm install
-npm start
-```
-
-Then open `http://localhost:3000/trollsure/`.
+Run locally with `npm install` then `npm start`, then open `http://localhost:3000/trollsure/`.
