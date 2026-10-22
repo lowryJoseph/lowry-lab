@@ -34,6 +34,7 @@
       <button class="tab" data-view="groups">Groups</button>
       <button class="tab" data-view="agents">Agent Portal</button>
       <button class="tab" data-view="claims">Claims</button>
+      <button class="tab" data-view="operations">Benefit Operations</button>
       <button class="tab" data-view="rates">Plans & Rates</button>
     </nav>
 
@@ -156,7 +157,7 @@
                 <label>Incident type<select id="claimIncident"><option>Troll encounter treatment</option><option>Goblin theft recovery</option><option>Dragon singe treatment</option><option>Dungeon mishap</option><option>Cursed object incident</option></select></label>
                 <label>Incident date<input id="claimDate" type="date" /></label>
               </div>
-              <label>Healer / vendor<input id="claimHealer" value="Moonwell Healing Hall" /></label>
+              <label>Healer / vendor<select id="claimProvider"><option value="P-201">Moonwell Healing Hall · In-Guild</option></select></label>
               <label>Submitted charge (gold pieces)<input id="claimCharge" type="number" min="1" step="0.1" value="1800" /></label>
               <p class="muted">Demo adjudication uses a guild-allowed charge of 85% of the submitted charge, then applies the selected protection's deductible and Battle Cost Share.</p>
               <button id="claimBtn" class="primary full">Submit Claim</button>
@@ -167,6 +168,42 @@
             <h2>Claim result</h2>
             <div id="claimResultEmpty" class="empty-state">No claim submitted yet.</div>
             <div id="claimResult" class="hidden"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="view" id="view-operations">
+        <div class="two-col">
+          <div class="panel">
+            <span class="step">BENEFIT OPERATIONS</span>
+            <h2>The paperwork dungeon</h2>
+            <p class="muted">Run realistic benefits-administration workflows against the most recent active enrollment. Still 100% fake. Unfortunately the forms are emotionally authentic.</p>
+            <div id="opsEmpty" class="empty-state">Enroll a guild first. Bureaucracy requires someone to bureaucratize.</div>
+            <div id="opsForm" class="hidden">
+              <div id="opsContext" class="claim-context"></div>
+              <div class="field-row">
+                <label>Covered adventurer<select id="opsMember"></select></label>
+                <label>Operation<select id="opsType">
+                  <option value="PRIOR_AUTH">Royal Pre-Approval</option>
+                  <option value="POTION_FILL">Potion Formulary Check</option>
+                  <option value="LIFE_EVENT">Quest Life Event</option>
+                  <option value="OPEN_ENROLLMENT">Annual Guild Enrollment</option>
+                  <option value="RENEWAL">Plan Renewal</option>
+                  <option value="APPEAL">Petition to the High Council</option>
+                  <option value="BILLING">Guild Premium Statement</option>
+                  <option value="CONTINUATION">Continuation Protection</option>
+                </select></label>
+              </div>
+              <label id="opsChoiceLabel">Service / election<select id="opsChoice"></select></label>
+              <label>Notes<input id="opsNotes" value="Adventurer insists the rune math is suspicious." /></label>
+              <button id="opsRun" class="primary full">Run Benefit Operation</button>
+            </div>
+            <div id="opsResult" class="hidden"></div>
+          </div>
+          <aside class="panel result-panel">
+            <span class="step">REFERENCE TABLES</span>
+            <h2>Guild network & potion formulary</h2>
+            <div id="opsCatalog" class="empty-state">Open this page to load the current network and formulary.</div>
           </aside>
         </div>
       </section>

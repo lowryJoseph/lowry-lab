@@ -686,6 +686,21 @@ const trollGroups = [];
 const trollQuotes = [];
 const trollEnrollments = [];
 const trollClaims = [];
+const trollOperations = [];
+const trollAccumulators = new Map();
+const trollProviders = [
+  { id: 'P-201', name: 'Moonwell Healing Hall', network: 'IN_GUILD', specialty: 'General Quest Medicine', allowedPct: 85 },
+  { id: 'P-202', name: 'Sister Brakka’s Bone & Potion', network: 'IN_GUILD', specialty: 'Bones, Burns & Potions', allowedPct: 88 },
+  { id: 'P-203', name: 'The Cleric Collective', network: 'IN_GUILD', specialty: 'Restoration & Curses', allowedPct: 90 },
+  { id: 'P-204', name: 'Gruk’s Discount Resurrection Wagon', network: 'OUT_OF_GUILD', specialty: 'Questionable Resurrection', allowedPct: 65 }
+];
+const trollFormulary = [
+  { code: 'POT-HEAL', name: 'Basic Healing Potion', tier: 1, copay: 5, status: 'PREFERRED' },
+  { code: 'POT-GREATER', name: 'Greater Healing Potion', tier: 2, copay: 12, status: 'PREFERRED' },
+  { code: 'POT-RESTORE', name: 'Elixir of Restoration', tier: 3, copay: 25, status: 'PRIOR_AUTH' },
+  { code: 'POT-GOBLIN', name: 'Suspicious Goblin Tonic', tier: 9, copay: 0, status: 'NOT_COVERED' }
+];
+let trollOperationSeq = 5000;
 let trollGroupSeq = 1000;
 let trollQuoteSeq = 2000;
 let trollEnrollmentSeq = 3000;
@@ -905,6 +920,13 @@ function trollClaimSharePct(enrollment, productCode) {
   return 20;
 }
 
+function trollAccumulatorKey(enrollmentId, memberId) { return `${enrollmentId}:${memberId}`; }
+function trollGetAccumulator(enrollment, member) {
+  const key = trollAccumulatorKey(enrollment.id, member.memberId);
+  if (!trollAccumulators.has(key)) trollAccumulators.set(key, { enrollmentId: enrollment.id, memberId: member.memberId, memberName: member.name, deductibleMet: 0, outOfPocket: 0, trollSurePaid: 0 });
+  return trollAccumulators.get(key);
+}
+
 function trollCreateClaim(input) {
   const enrollment = trollEnrollments.find(item => item.id === input.enrollmentId);
   if (!enrollment) throw new Error('Enrollment not found');
@@ -914,13 +936,23 @@ function trollCreateClaim(input) {
   if (!coverage) throw new Error('Selected protection is not active for this adventurer');
 
   const submittedCharge = Math.max(0, Number(input.submittedCharge || 0));
-  const allowedCharge = trollRound(submittedCharge * 0.85);
-  const deductibleApplied = trollRound(Math.min(Number(coverage.deductible || 0), allowedCharge));
+  const provider = trollProviders.find(item => item.id === input.providerId) || trollProviders.find(item => item.name === input.healerName) || trollProviders[0];
+  const allowedCharge = trollRound(submittedCharge * Number(provider.allowedPct || 85) / 100);
+  const accumulator = trollGetAccumulator(enrollment, member);
+  const deductibleTotal = Number(coverage.deductible || 0);
+  const deductibleRemainingBefore = trollRound(Math.max(0, deductibleTotal - accumulator.deductibleMet));
+  const deductibleApplied = trollRound(Math.min(deductibleRemainingBefore, allowedCharge));
   const postDeductible = trollRound(Math.max(0, allowedCharge - deductibleApplied));
   const battleCostSharePct = trollClaimSharePct(enrollment, input.productCode);
-  const battleCostShare = trollRound(postDeductible * battleCostSharePct / 100);
-  const adventurerOwes = trollRound(deductibleApplied + battleCostShare);
+  const rawBattleCostShare = trollRound(postDeductible * battleCostSharePct / 100);
+  const maxQuestBurden = input.productCode === 'TROLL' ? Number(enrollment.plan?.maxQuestBurden || 6000) : 999999;
+  const burdenRemainingBefore = trollRound(Math.max(0, maxQuestBurden - accumulator.outOfPocket));
+  const adventurerOwes = trollRound(Math.min(burdenRemainingBefore, deductibleApplied + rawBattleCostShare));
+  const battleCostShare = trollRound(Math.max(0, adventurerOwes - deductibleApplied));
   const trollSurePays = trollRound(Math.max(0, allowedCharge - adventurerOwes));
+  accumulator.deductibleMet = trollRound(accumulator.deductibleMet + deductibleApplied);
+  accumulator.outOfPocket = trollRound(accumulator.outOfPocket + adventurerOwes);
+  accumulator.trollSurePaid = trollRound(accumulator.trollSurePaid + trollSurePays);
 
   return {
     id: `C-${++trollClaimSeq}`,
@@ -931,7 +963,9 @@ function trollCreateClaim(input) {
     productCode: coverage.code,
     productName: coverage.name,
     incidentType: String(input.incidentType || 'Quest mishap'),
-    healerName: String(input.healerName || 'Moonwell Healing Hall'),
+    healerName: provider.name,
+    providerId: provider.id,
+    providerNetwork: provider.network,
     incidentDate: String(input.incidentDate || new Date().toISOString().slice(0, 10)),
     submittedAt: new Date().toISOString(),
     status: 'APPROVED',
@@ -941,7 +975,11 @@ function trollCreateClaim(input) {
     battleCostSharePct,
     battleCostShare,
     trollSurePays,
-    adventurerOwes
+    adventurerOwes,
+    deductibleRemaining: trollRound(Math.max(0, deductibleTotal - accumulator.deductibleMet)),
+    outOfPocketYtd: accumulator.outOfPocket,
+    maxQuestBurden,
+    trollSurePaidYtd: accumulator.trollSurePaid
   };
 }
 
@@ -962,6 +1000,67 @@ function trollScrollHtml({ title, subtitle, badge, sections }) {
   </style></head><body><div class="toolbar"><button onclick="window.print()">Print / Save as PDF</button></div><main class="sheet"><header class="crest"><div><div class="eyebrow">TrollSure · Official Guild Scroll</div><h1>${trollDocEscape(title)}</h1><div class="subtitle">${trollDocEscape(subtitle)}</div></div><div class="badge">${trollDocEscape(badge)}</div></header>${sectionHtml}<footer>Entirely fictional fantasy benefits document. No actual insurance coverage exists. Generated by Lowry Lab TrollSure.</footer></main></body></html>`;
 }
 
+
+
+app.get('/api/troll/providers', (req, res) => res.json(trollProviders));
+app.get('/api/troll/formulary', (req, res) => res.json(trollFormulary));
+app.get('/api/troll/accumulators/:enrollmentId/:memberId', (req, res) => {
+  const enrollment = trollEnrollments.find(item => item.id === req.params.enrollmentId);
+  const member = enrollment?.memberLines.find(item => item.memberId === req.params.memberId);
+  if (!enrollment || !member) return res.status(404).json({ error: 'Covered adventurer not found' });
+  res.json(trollGetAccumulator(enrollment, member));
+});
+app.get('/api/troll/operations', (req, res) => res.json(trollOperations));
+app.post('/api/troll/operations', (req, res) => {
+  try {
+    const type = String(req.body?.type || '').toUpperCase();
+    const enrollment = trollEnrollments.find(item => item.id === req.body?.enrollmentId);
+    if (!enrollment) throw new Error('Enrollment not found');
+    const group = trollGroups.find(item => item.id === enrollment.groupId);
+    const member = enrollment.memberLines.find(item => item.memberId === req.body?.memberId) || enrollment.memberLines.find(item => item.enrollmentStatus === 'ACTIVE');
+    const details = {};
+    let status = 'COMPLETED'; let message = '';
+    if (type === 'PRIOR_AUTH') {
+      const service = String(req.body?.serviceCode || 'CURSED_LIMB_REGENERATION');
+      const denied = service === 'DISCOUNT_RESURRECTION';
+      status = denied ? 'DENIED' : 'APPROVED';
+      message = denied ? 'Out-of-guild discount resurrection is not approved. Please choose a credentialed cleric.' : 'Royal Pre-Approval granted before the quest service is performed.';
+      Object.assign(details, { serviceCode: service, memberName: member?.name, authorizationNumber: `RA-${Date.now().toString().slice(-6)}` });
+    } else if (type === 'POTION_FILL') {
+      const potion = trollFormulary.find(item => item.code === req.body?.serviceCode) || trollFormulary[0];
+      status = potion.status === 'NOT_COVERED' ? 'DENIED' : potion.status === 'PRIOR_AUTH' ? 'PENDING_AUTH' : 'APPROVED';
+      message = status === 'APPROVED' ? `Potion covered for ${trollDocCoins(potion.copay)}.` : status === 'PENDING_AUTH' ? 'Potion requires Royal Pre-Approval.' : 'Potion is excluded from the guild formulary.';
+      Object.assign(details, potion);
+    } else if (type === 'LIFE_EVENT') {
+      const eventType = String(req.body?.eventType || 'NEW_PARTY_MEMBER');
+      if (member && eventType === 'NEW_PARTY_MEMBER') member.dependents = Number(member.dependents || 0) + 1;
+      status = 'SPECIAL_ENROLLMENT_OPEN'; message = 'A 30-day special enrollment window has opened.';
+      Object.assign(details, { eventType, memberName: member?.name, dependents: member?.dependents });
+    } else if (type === 'OPEN_ENROLLMENT') {
+      const nextPlan = trollPlan(req.body?.planCode || 'MITHRIL');
+      status = 'ELECTION_RECORDED'; message = `Next plan year election recorded for ${nextPlan.name}.`;
+      Object.assign(details, { currentPlan: enrollment.plan?.name, nextPlan: nextPlan.name, effectiveDate: trollEffectiveDate(0) });
+    } else if (type === 'RENEWAL') {
+      const increasePct = 6.25; const renewalPremium = trollRound(enrollment.grossPremium * 1.0625);
+      status = 'RENEWAL_OFFERED'; message = 'Renewal offer generated for the next guild plan year.';
+      Object.assign(details, { currentPremium: enrollment.grossPremium, renewalPremium, increasePct, currentPlan: enrollment.plan?.name });
+    } else if (type === 'APPEAL') {
+      const claim = trollClaims.find(item => item.id === req.body?.claimId) || trollClaims.filter(item => item.enrollmentId === enrollment.id).slice(-1)[0];
+      if (!claim) throw new Error('No claim available to appeal');
+      status = 'UNDER_ARCANE_REVIEW'; message = 'Petition accepted by the High Council. A different adjudicator will review the claim.';
+      Object.assign(details, { claimId: claim.id, originalStatus: claim.status, reason: String(req.body?.notes || 'Adventurer disputes the rune math.') });
+    } else if (type === 'BILLING') {
+      const due = trollRound(enrollment.grossPremium); status = 'STATEMENT_READY'; message = 'Monthly guild premium statement generated.';
+      Object.assign(details, { grossPremium: due, guildContribution: enrollment.guildContribution, adventurerContribution: enrollment.adventurerContribution, dueDate: new Date(Date.now()+14*86400000).toISOString().slice(0,10) });
+    } else if (type === 'CONTINUATION') {
+      const base = member?.grossPremium || 0; const continuationPremium = trollRound(base * 1.02);
+      status = 'CONTINUATION_OFFERED'; message = 'Former adventurer may continue protection for 18 moon cycles at full cost plus a 2% administrative rune fee.';
+      Object.assign(details, { memberName: member?.name, monthlyPremium: continuationPremium, electionWindowDays: 60, durationMonths: 18 });
+    } else throw new Error('Unknown benefit operation');
+    const record = { id: `OP-${++trollOperationSeq}`, type, enrollmentId: enrollment.id, groupId: group?.id, memberId: member?.memberId, status, message, details, createdAt: new Date().toISOString() };
+    trollOperations.push(record); res.status(201).json(record);
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
 
 app.get('/api/troll/claims', (req, res) => res.json(trollClaims));
 app.post('/api/troll/claims', (req, res) => {
@@ -1039,7 +1138,8 @@ app.get('/api/troll/documents/eob/:id', (req, res) => {
     sections: [
       { title: 'Quest Event', html: `<div class="stat-grid"><div class="stat"><span>Adventurer</span><strong>${trollDocEscape(claim.memberName)}</strong></div><div class="stat"><span>Guild</span><strong>${trollDocEscape(group?.name || claim.groupId)}</strong></div><div class="stat"><span>Healer / Vendor</span><strong>${trollDocEscape(claim.healerName)}</strong></div><div class="stat"><span>Protection</span><strong>${trollDocEscape(claim.productName)}</strong></div></div>` },
       { title: 'How the Coin Was Counted', html: `<div class="stat-grid"><div class="stat"><span>Healer Charged</span><strong>${trollDocCoins(claim.submittedCharge)}</strong></div><div class="stat"><span>Guild Allowed</span><strong>${trollDocCoins(claim.allowedCharge)}</strong></div><div class="stat"><span>Deductible</span><strong>${trollDocCoins(claim.deductibleApplied)}</strong></div><div class="stat"><span>Battle Cost Share</span><strong>${claim.battleCostSharePct}% · ${trollDocCoins(claim.battleCostShare)}</strong></div></div>` },
-      { title: 'Final Responsibility', html: `<div class="stat-grid"><div class="stat"><span>TrollSure Paid</span><strong>${trollDocCoins(claim.trollSurePays)}</strong></div><div class="stat"><span>You May Owe</span><strong>${trollDocCoins(claim.adventurerOwes)}</strong></div><div class="stat"><span>Plan</span><strong>${trollDocEscape(enrollment?.plan?.name || 'Unknown')}</strong></div><div class="stat"><span>Status</span><strong>${claim.status}</strong></div></div>` },
+      { title: 'Final Responsibility', html: `<div class="stat-grid"><div class="stat"><span>TrollSure Paid</span><strong>${trollDocCoins(claim.trollSurePays)}</strong></div><div class="stat"><span>You May Owe</span><strong>${trollDocCoins(claim.adventurerOwes)}</strong></div><div class="stat"><span>Deductible Remaining</span><strong>${trollDocCoins(claim.deductibleRemaining)}</strong></div><div class="stat"><span>Quest Burden YTD</span><strong>${trollDocCoins(claim.outOfPocketYtd)}</strong></div></div>` },
+      { title: 'Plan Year Totals', html: `<div class="stat-grid"><div class="stat"><span>Max Quest Burden</span><strong>${trollDocCoins(claim.maxQuestBurden)}</strong></div><div class="stat"><span>TrollSure Paid YTD</span><strong>${trollDocCoins(claim.trollSurePaidYtd)}</strong></div><div class="stat"><span>Plan</span><strong>${trollDocEscape(enrollment?.plan?.name || 'Unknown')}</strong></div><div class="stat"><span>Status</span><strong>${claim.status}</strong></div></div>` },
       { title: 'Important Rune', html: `<div class="note"><strong>This is not a bill.</strong> It explains how TrollSure processed this fictional claim. If you disagree, please submit a Petition to the High Council once that feature exists.</div>` }
     ]
   });
@@ -1112,6 +1212,26 @@ app.get('/api/troll/bff/agents/:id', async (req, res) => {
   } catch (error) { res.status(404).json({ error: error.message }); }
 });
 
+
+app.get('/api/troll/bff/operations/catalog', async (req, res) => {
+  try {
+    const trace = ['UI → REST BFF: GET /api/troll/bff/operations/catalog'];
+    const providers = await trollInternalGet('/api/troll/providers', trace, 'REST BFF');
+    const formulary = await trollInternalGet('/api/troll/formulary', trace, 'REST BFF');
+    trace.push('REST BFF composed provider network + potion formulary → UI');
+    res.json({ providers, formulary, trace, backendCallCount: 2 });
+  } catch (error) { res.status(500).json({ error: error.message }); }
+});
+app.post('/api/troll/bff/operations', async (req, res) => {
+  try {
+    const trace = ['UI → REST BFF: POST /api/troll/bff/operations'];
+    const enrollment = await trollInternalGet(`/api/troll/enrollments/${req.body?.enrollmentId}`, trace, 'REST BFF');
+    const operation = await trollInternalPost('/api/troll/operations', req.body || {}, trace, 'REST BFF');
+    trace.push('REST BFF composed enrollment validation + benefit operation → UI');
+    res.status(201).json({ operation, enrollment, trace, backendCallCount: 2 });
+  } catch (error) { res.status(400).json({ error: error.message }); }
+});
+
 // GraphQL facade -------------------------------------------------------------
 const trollSchema = buildSchema(`
   enum TrollLocation { UPPER_LANDS LOWER_LANDS }
@@ -1125,8 +1245,13 @@ const trollSchema = buildSchema(`
   type MemberQuote { memberId: String!, name: String!, dependents: Int!, tier: String!, eligibilityClass: String!, eligibilityName: String!, eligible: Boolean!, election: String!, orcLiverUse: Boolean!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, coverage: [ProductRate!]! }
   type Quote { id: ID!, groupId: ID!, groupName: String!, location: String!, groupClass: String!, memberCount: Int!, eligibleMemberCount: Int!, dependentCount: Int!, locationAdjustmentPct: Float!, largeGroupDiscountPct: Float!, orcLiverUseAdjustmentPct: Float!, guildContributionPct: Float!, waitingPeriodDays: Int!, effectiveDate: String!, expiresAt: String!, status: String!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, monthlyPremium: Float!, plan: TrollPlan!, products: [TrollProduct!]!, memberLines: [MemberQuote!]! }
   type Enrollment { id: ID!, quoteId: ID!, groupId: ID!, status: String!, effectiveDate: String!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, plan: TrollPlan, products: [TrollProduct!], memberLines: [MemberQuote!] }
-  type Claim { id: ID!, enrollmentId: ID!, groupId: ID!, memberId: ID!, memberName: String!, productCode: String!, productName: String!, incidentType: String!, healerName: String!, incidentDate: String!, status: String!, submittedCharge: Float!, allowedCharge: Float!, deductibleApplied: Float!, battleCostSharePct: Float!, battleCostShare: Float!, trollSurePays: Float!, adventurerOwes: Float! }
+  type Claim { id: ID!, enrollmentId: ID!, groupId: ID!, memberId: ID!, memberName: String!, productCode: String!, productName: String!, incidentType: String!, healerName: String!, providerId: String, providerNetwork: String, incidentDate: String!, status: String!, submittedCharge: Float!, allowedCharge: Float!, deductibleApplied: Float!, battleCostSharePct: Float!, battleCostShare: Float!, trollSurePays: Float!, adventurerOwes: Float!, deductibleRemaining: Float, outOfPocketYtd: Float, maxQuestBurden: Float, trollSurePaidYtd: Float }
   type ClaimPayload { claim: Claim!, enrollment: Enrollment!, trace: [String!]!, backendCallCount: Int! }
+  type Provider { id: ID!, name: String!, network: String!, specialty: String!, allowedPct: Float! }
+  type Potion { code: String!, name: String!, tier: Int!, copay: Float!, status: String! }
+  type OperationsCatalog { providers: [Provider!]!, formulary: [Potion!]!, trace: [String!]!, backendCallCount: Int! }
+  type Operation { id: ID!, type: String!, enrollmentId: ID!, groupId: ID, memberId: ID, status: String!, message: String!, detailsJson: String!, createdAt: String! }
+  type OperationPayload { operation: Operation!, enrollment: Enrollment!, trace: [String!]!, backendCallCount: Int! }
   type Group { id: ID!, name: String!, location: String!, status: String!, agentId: ID }
   type Agent { id: ID!, name: String!, title: String!, region: String!, commissionPct: Float! }
   type AgentMetrics { groups: Int!, activeEnrollments: Int!, activeMembers: Int!, monthlyPremium: Float!, estimatedCommission: Float! }
@@ -1137,8 +1262,9 @@ const trollSchema = buildSchema(`
   input MemberInput { id: ID, name: String!, dependents: Int!, eligibilityClass: EligibilityClass!, election: CoverageElection!, orcLiverUse: Boolean! }
   input QuoteInput { groupName: String!, location: TrollLocation!, members: [MemberInput!]!, products: [TrollProductCode!]!, planCode: TrollPlanCode!, guildContributionPct: Float!, waitingPeriodDays: Int!, agentId: ID }
   input ClaimInput { enrollmentId: ID!, memberId: ID!, productCode: TrollProductCode!, incidentType: String!, healerName: String!, incidentDate: String!, submittedCharge: Float! }
-  type Query { trollGroup(id: ID!): GroupPayload!, trollAgent(id: ID!): AgentBook! }
-  type Mutation { createTrollQuote(input: QuoteInput!): QuotePayload!, enrollTrollQuote(quoteId: ID!): EnrollmentPayload!, submitTrollClaim(input: ClaimInput!): ClaimPayload! }
+  input OperationInput { enrollmentId: ID!, memberId: ID, type: String!, serviceCode: String, eventType: String, planCode: String, claimId: ID, notes: String }
+  type Query { trollGroup(id: ID!): GroupPayload!, trollAgent(id: ID!): AgentBook!, trollOperationsCatalog: OperationsCatalog! }
+  type Mutation { createTrollQuote(input: QuoteInput!): QuotePayload!, enrollTrollQuote(quoteId: ID!): EnrollmentPayload!, submitTrollClaim(input: ClaimInput!): ClaimPayload!, runTrollOperation(input: OperationInput!): OperationPayload! }
 `);
 
 const trollRoot = {
@@ -1163,6 +1289,21 @@ const trollRoot = {
     const claim = await trollInternalPost('/api/troll/claims', input, trace, 'GraphQL');
     trace.push('GraphQL resolver composed enrollment validation + claim adjudication → UI');
     return { claim, enrollment, trace, backendCallCount: 2 };
+  },
+  runTrollOperation: async ({ input }) => {
+    const trace = ['UI → GraphQL: mutation runTrollOperation'];
+    const enrollment = await trollInternalGet(`/api/troll/enrollments/${input.enrollmentId}`, trace, 'GraphQL');
+    const raw = await trollInternalPost('/api/troll/operations', input, trace, 'GraphQL');
+    const operation = { ...raw, detailsJson: JSON.stringify(raw.details || {}) };
+    trace.push('GraphQL resolver composed enrollment validation + benefit operation → UI');
+    return { operation, enrollment, trace, backendCallCount: 2 };
+  },
+  trollOperationsCatalog: async () => {
+    const trace = ['UI → GraphQL: query trollOperationsCatalog'];
+    const providers = await trollInternalGet('/api/troll/providers', trace, 'GraphQL');
+    const formulary = await trollInternalGet('/api/troll/formulary', trace, 'GraphQL');
+    trace.push('GraphQL resolver composed provider network + potion formulary → UI');
+    return { providers, formulary, trace, backendCallCount: 2 };
   },
   trollAgent: async ({ id }) => {
     const trace = ['UI → GraphQL: query trollAgent'];
