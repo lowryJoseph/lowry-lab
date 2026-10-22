@@ -32,6 +32,7 @@
       <button class="tab active" data-view="quote">New Quote</button>
       <button class="tab" data-view="enroll">Enrollment</button>
       <button class="tab" data-view="groups">Groups</button>
+      <button class="tab" data-view="agents">Agent Portal</button>
       <button class="tab" data-view="claims">Claims</button>
       <button class="tab" data-view="rates">Plans & Rates</button>
     </nav>
@@ -47,6 +48,9 @@
 
             <label>Party / guild name
               <input id="groupName" value="Fellowship of Questionable Decisions" />
+            </label>
+            <label>Guild benefits agent
+              <select id="agentId"><option value="A-101">Merrick Quill · Licensed Guild Risk Scribe</option><option value="A-102">Brunna Ledgerstone · Senior Party Benefits Broker</option><option value="A-103">Fenwick Inkpot · Associate Protection Peddler</option></select>
             </label>
 
             <div class="field-row three">
@@ -128,6 +132,13 @@
         </div>
       </section>
 
+
+      <section class="view" id="view-agents">
+        <div class="panel">
+          <div class="panel-heading"><div><span class="step">AGENT PORTAL</span><h2>Book of Business</h2></div><select id="agentSelect" class="agent-select"><option value="A-101">Merrick Quill</option><option value="A-102">Brunna Ledgerstone</option><option value="A-103">Fenwick Inkpot</option></select></div>
+          <div id="agentPortal" class="empty-state">Choose a guild benefits agent to inspect their book of business.</div>
+        </div>
+      </section>
 
       <section class="view" id="view-claims">
         <div class="two-col">

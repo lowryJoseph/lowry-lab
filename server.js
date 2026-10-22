@@ -676,6 +676,12 @@ const trollEligibilityClasses = [
   { code: 'SEASONAL', name: 'Seasonal Mercenary', eligible: false, note: 'Not eligible for TrollSure in V1.' }
 ];
 
+const trollAgents = [
+  { id: 'A-101', name: 'Merrick Quill', title: 'Licensed Guild Risk Scribe', region: 'Upper & Lower Lands', commissionPct: 5 },
+  { id: 'A-102', name: 'Brunna Ledgerstone', title: 'Senior Party Benefits Broker', region: 'Lower Lands', commissionPct: 5 },
+  { id: 'A-103', name: 'Fenwick Inkpot', title: 'Associate Protection Peddler', region: 'Upper Lands', commissionPct: 5 }
+];
+
 const trollGroups = [];
 const trollQuotes = [];
 const trollEnrollments = [];
@@ -799,6 +805,19 @@ app.get('/api/troll/rates', (req, res) => res.json({
   }
 }));
 
+app.get('/api/troll/agents', (req, res) => res.json(trollAgents));
+app.get('/api/troll/agents/:id', (req, res) => {
+  const agent = trollAgents.find(item => item.id === req.params.id);
+  if (!agent) return res.status(404).json({ error: 'Guild benefits agent not found' });
+  const groups = trollGroups.filter(group => group.agentId === agent.id);
+  const groupIds = new Set(groups.map(group => group.id));
+  const enrollments = trollEnrollments.filter(item => groupIds.has(item.groupId));
+  const activeMembers = enrollments.reduce((sum, enrollment) => sum + enrollment.memberLines.filter(line => line.enrollmentStatus === 'ACTIVE').length, 0);
+  const monthlyPremium = trollRound(enrollments.reduce((sum, enrollment) => sum + Number(enrollment.grossPremium || 0), 0));
+  const estimatedCommission = trollRound(monthlyPremium * agent.commissionPct / 100);
+  res.json({ agent, groups, enrollments, metrics: { groups: groups.length, activeEnrollments: enrollments.length, activeMembers, monthlyPremium, estimatedCommission } });
+});
+
 app.get('/api/troll/groups', (req, res) => res.json(trollGroups));
 app.post('/api/troll/groups', (req, res) => {
   const group = {
@@ -806,6 +825,7 @@ app.post('/api/troll/groups', (req, res) => {
     name: req.body?.name || `Untitled Party ${trollGroupSeq}`,
     location: req.body?.location === 'LOWER_LANDS' ? 'LOWER_LANDS' : 'UPPER_LANDS',
     members: Array.isArray(req.body?.members) ? req.body.members : [],
+    agentId: trollAgents.some(agent => agent.id === req.body?.agentId) ? req.body.agentId : trollAgents[0].id,
     status: 'PROSPECT'
   };
   trollGroups.push(group);
@@ -990,6 +1010,43 @@ app.get('/api/troll/documents/claim/:id', (req, res) => {
 });
 
 
+app.get('/api/troll/documents/member-card/:enrollmentId/:memberId', (req, res) => {
+  const enrollment = trollEnrollments.find(item => item.id === req.params.enrollmentId);
+  if (!enrollment) return res.status(404).send('Enrollment not found');
+  const member = enrollment.memberLines.find(item => item.memberId === req.params.memberId);
+  if (!member || member.enrollmentStatus !== 'ACTIVE') return res.status(404).send('Active adventurer not found');
+  const group = trollGroups.find(item => item.id === enrollment.groupId);
+  const coverage = (member.coverage || []).map(item => item.name).join(' · ');
+  const html = trollScrollHtml({
+    title: 'Adventurer Benefit Card', subtitle: `${member.name} · Member ${member.memberId}`, badge: enrollment.plan?.name || 'ACTIVE',
+    sections: [
+      { title: 'Identity', html: `<div class="stat-grid"><div class="stat"><span>Adventurer</span><strong>${trollDocEscape(member.name)}</strong></div><div class="stat"><span>Guild</span><strong>${trollDocEscape(group?.name || enrollment.groupId)}</strong></div><div class="stat"><span>Member ID</span><strong>${member.memberId}</strong></div><div class="stat"><span>Effective</span><strong>${enrollment.effectiveDate}</strong></div></div>` },
+      { title: 'Protection Stats', html: `<div class="stat-grid"><div class="stat"><span>Shield</span><strong>${trollDocEscape(enrollment.plan?.name || 'Unknown')}</strong></div><div class="stat"><span>Deductible</span><strong>${trollDocCoins(enrollment.plan?.deductible)}</strong></div><div class="stat"><span>Battle Cost Share</span><strong>${enrollment.plan?.battleCostSharePct || 0}%</strong></div><div class="stat"><span>Max Quest Burden</span><strong>${trollDocCoins(enrollment.plan?.maxQuestBurden)}</strong></div></div>` },
+      { title: 'Active Protections', html: `<div class="note">${trollDocEscape(coverage || 'Troll Insurance')}</div>` },
+      { title: 'Healer Instructions', html: `<div class="note">Present this card to participating guild healers, potion merchants, singe specialists, or suspiciously credentialed clerics. This is a fictional demo card and has absolutely no real-world insurance value.</div>` }
+    ]
+  });
+  res.type('html').send(html);
+});
+
+app.get('/api/troll/documents/eob/:id', (req, res) => {
+  const claim = trollClaims.find(item => item.id === req.params.id);
+  if (!claim) return res.status(404).send('Claim not found');
+  const enrollment = trollEnrollments.find(item => item.id === claim.enrollmentId);
+  const group = trollGroups.find(item => item.id === claim.groupId);
+  const html = trollScrollHtml({
+    title: 'Explanation of Battle Benefits', subtitle: `${claim.memberName} · Claim ${claim.id}`, badge: 'NOT A BILL',
+    sections: [
+      { title: 'Quest Event', html: `<div class="stat-grid"><div class="stat"><span>Adventurer</span><strong>${trollDocEscape(claim.memberName)}</strong></div><div class="stat"><span>Guild</span><strong>${trollDocEscape(group?.name || claim.groupId)}</strong></div><div class="stat"><span>Healer / Vendor</span><strong>${trollDocEscape(claim.healerName)}</strong></div><div class="stat"><span>Protection</span><strong>${trollDocEscape(claim.productName)}</strong></div></div>` },
+      { title: 'How the Coin Was Counted', html: `<div class="stat-grid"><div class="stat"><span>Healer Charged</span><strong>${trollDocCoins(claim.submittedCharge)}</strong></div><div class="stat"><span>Guild Allowed</span><strong>${trollDocCoins(claim.allowedCharge)}</strong></div><div class="stat"><span>Deductible</span><strong>${trollDocCoins(claim.deductibleApplied)}</strong></div><div class="stat"><span>Battle Cost Share</span><strong>${claim.battleCostSharePct}% · ${trollDocCoins(claim.battleCostShare)}</strong></div></div>` },
+      { title: 'Final Responsibility', html: `<div class="stat-grid"><div class="stat"><span>TrollSure Paid</span><strong>${trollDocCoins(claim.trollSurePays)}</strong></div><div class="stat"><span>You May Owe</span><strong>${trollDocCoins(claim.adventurerOwes)}</strong></div><div class="stat"><span>Plan</span><strong>${trollDocEscape(enrollment?.plan?.name || 'Unknown')}</strong></div><div class="stat"><span>Status</span><strong>${claim.status}</strong></div></div>` },
+      { title: 'Important Rune', html: `<div class="note"><strong>This is not a bill.</strong> It explains how TrollSure processed this fictional claim. If you disagree, please submit a Petition to the High Council once that feature exists.</div>` }
+    ]
+  });
+  res.type('html').send(html);
+});
+
+
 async function trollInternalGet(path, trace, caller) {
   trace.push(`${caller} → REST GET ${path}`);
   const response = await fetch(`http://127.0.0.1:${PORT}${path}`);
@@ -1007,9 +1064,9 @@ async function trollInternalPost(path, body, trace, caller) {
 app.post('/api/troll/bff/quote', async (req, res) => {
   try {
     const trace = ['UI → REST BFF: POST /api/troll/bff/quote'];
-    const group = await trollInternalPost('/api/troll/groups', { name: req.body?.groupName, location: req.body?.location, members: req.body?.members }, trace, 'REST BFF');
+    const group = await trollInternalPost('/api/troll/groups', { name: req.body?.groupName, location: req.body?.location, members: req.body?.members, agentId: req.body?.agentId }, trace, 'REST BFF');
     const rating = await trollInternalPost('/api/troll/rating/calculate', { ...req.body, groupName: group.name, location: group.location, members: group.members }, trace, 'REST BFF');
-    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id }, trace, 'REST BFF');
+    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id, agentId: group.agentId }, trace, 'REST BFF');
     trace.push('REST BFF composed group + rating + quote → UI');
     res.status(201).json({ quote, trace, backendCallCount: 3 });
   } catch (error) { res.status(500).json({ error: error.message }); }
@@ -1046,6 +1103,15 @@ app.get('/api/troll/bff/groups/:id', async (req, res) => {
   } catch (error) { res.status(404).json({ error: error.message }); }
 });
 
+app.get('/api/troll/bff/agents/:id', async (req, res) => {
+  try {
+    const trace = [`UI → REST BFF: GET /api/troll/bff/agents/${req.params.id}`];
+    const book = await trollInternalGet(`/api/troll/agents/${req.params.id}`, trace, 'REST BFF');
+    trace.push('REST BFF returned agent book of business → UI');
+    res.json({ ...book, trace, backendCallCount: 1 });
+  } catch (error) { res.status(404).json({ error: error.message }); }
+});
+
 // GraphQL facade -------------------------------------------------------------
 const trollSchema = buildSchema(`
   enum TrollLocation { UPPER_LANDS LOWER_LANDS }
@@ -1061,23 +1127,26 @@ const trollSchema = buildSchema(`
   type Enrollment { id: ID!, quoteId: ID!, groupId: ID!, status: String!, effectiveDate: String!, grossPremium: Float!, guildContribution: Float!, adventurerContribution: Float!, plan: TrollPlan, products: [TrollProduct!], memberLines: [MemberQuote!] }
   type Claim { id: ID!, enrollmentId: ID!, groupId: ID!, memberId: ID!, memberName: String!, productCode: String!, productName: String!, incidentType: String!, healerName: String!, incidentDate: String!, status: String!, submittedCharge: Float!, allowedCharge: Float!, deductibleApplied: Float!, battleCostSharePct: Float!, battleCostShare: Float!, trollSurePays: Float!, adventurerOwes: Float! }
   type ClaimPayload { claim: Claim!, enrollment: Enrollment!, trace: [String!]!, backendCallCount: Int! }
-  type Group { id: ID!, name: String!, location: String!, status: String! }
+  type Group { id: ID!, name: String!, location: String!, status: String!, agentId: ID }
+  type Agent { id: ID!, name: String!, title: String!, region: String!, commissionPct: Float! }
+  type AgentMetrics { groups: Int!, activeEnrollments: Int!, activeMembers: Int!, monthlyPremium: Float!, estimatedCommission: Float! }
+  type AgentBook { agent: Agent!, groups: [Group!]!, enrollments: [Enrollment!]!, metrics: AgentMetrics!, trace: [String!]!, backendCallCount: Int! }
   type QuotePayload { quote: Quote!, trace: [String!]!, backendCallCount: Int! }
   type EnrollmentPayload { enrollment: Enrollment!, group: Group!, trace: [String!]!, backendCallCount: Int! }
   type GroupPayload { group: Group!, quote: Quote, enrollment: Enrollment, trace: [String!]!, backendCallCount: Int! }
   input MemberInput { id: ID, name: String!, dependents: Int!, eligibilityClass: EligibilityClass!, election: CoverageElection!, orcLiverUse: Boolean! }
-  input QuoteInput { groupName: String!, location: TrollLocation!, members: [MemberInput!]!, products: [TrollProductCode!]!, planCode: TrollPlanCode!, guildContributionPct: Float!, waitingPeriodDays: Int! }
+  input QuoteInput { groupName: String!, location: TrollLocation!, members: [MemberInput!]!, products: [TrollProductCode!]!, planCode: TrollPlanCode!, guildContributionPct: Float!, waitingPeriodDays: Int!, agentId: ID }
   input ClaimInput { enrollmentId: ID!, memberId: ID!, productCode: TrollProductCode!, incidentType: String!, healerName: String!, incidentDate: String!, submittedCharge: Float! }
-  type Query { trollGroup(id: ID!): GroupPayload! }
+  type Query { trollGroup(id: ID!): GroupPayload!, trollAgent(id: ID!): AgentBook! }
   type Mutation { createTrollQuote(input: QuoteInput!): QuotePayload!, enrollTrollQuote(quoteId: ID!): EnrollmentPayload!, submitTrollClaim(input: ClaimInput!): ClaimPayload! }
 `);
 
 const trollRoot = {
   createTrollQuote: async ({ input }) => {
     const trace = ['UI → GraphQL: mutation createTrollQuote'];
-    const group = await trollInternalPost('/api/troll/groups', { name: input.groupName, location: input.location, members: input.members }, trace, 'GraphQL');
+    const group = await trollInternalPost('/api/troll/groups', { name: input.groupName, location: input.location, members: input.members, agentId: input.agentId }, trace, 'GraphQL');
     const rating = await trollInternalPost('/api/troll/rating/calculate', { ...input, groupName: group.name, location: group.location, members: group.members }, trace, 'GraphQL');
-    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id }, trace, 'GraphQL');
+    const quote = await trollInternalPost('/api/troll/quotes', { ...rating, groupId: group.id, agentId: group.agentId }, trace, 'GraphQL');
     trace.push('GraphQL resolver composed group + rating + quote → UI');
     return { quote, trace, backendCallCount: 3 };
   },
@@ -1094,6 +1163,12 @@ const trollRoot = {
     const claim = await trollInternalPost('/api/troll/claims', input, trace, 'GraphQL');
     trace.push('GraphQL resolver composed enrollment validation + claim adjudication → UI');
     return { claim, enrollment, trace, backendCallCount: 2 };
+  },
+  trollAgent: async ({ id }) => {
+    const trace = ['UI → GraphQL: query trollAgent'];
+    const book = await trollInternalGet(`/api/troll/agents/${id}`, trace, 'GraphQL');
+    trace.push('GraphQL resolver returned agent book of business → UI');
+    return { ...book, trace, backendCallCount: 1 };
   },
   trollGroup: async ({ id }) => {
     const trace = ['UI → GraphQL: query trollGroup'];
